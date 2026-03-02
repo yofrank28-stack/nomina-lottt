@@ -1,6 +1,6 @@
 {
-  "name": "nextjs-template",
-  "version": "0.1.0",
+  "name": "nomina-venezuela",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,13 +12,19 @@
   "dependencies": {
     "next": "^16.1.3",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.1",
+    "lucide-react": "^0.294.0",
+    "zustand": "^4.4.7",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
     "@types/node": "^24.10.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/bcryptjs": "^2.4.6",
     "@tailwindcss/postcss": "^4.1.17",
     "tailwindcss": "^4.1.17",
     "eslint": "^9.39.1",
