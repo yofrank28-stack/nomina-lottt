@@ -48,6 +48,7 @@ export interface Parametros {
   mes: number;
   salario_minimo: number;
   tasa_cambio: number;
+  tasa_activa: number;  // Tasa activa BCV para prestaciones sociales
   umv: number;
   fecha_actualizacion_tasa?: string;
 }
@@ -98,6 +99,7 @@ interface AppState {
   
   // Tasa BCV
   tasaCambio: number;
+  tasaActiva: number;  // Tasa activa para prestaciones sociales
   
   // Acciones
   setUsuario: (usuario: Usuario | null) => void;
@@ -110,12 +112,17 @@ interface AppState {
   setError: (error: string | null) => void;
   setSuccessMessage: (message: string | null) => void;
   setTasaCambio: (tasa: number) => void;
+  setTasaActiva: (tasa: number) => void;
   
   // Gestión de empleados
   addEmpleado: (empleado: Omit<Empleado, 'id'>) => void;
   updateEmpleado: (id: number, data: Partial<Empleado>) => void;
   deleteEmpleado: (id: number) => void;
   egressEmpleado: (id: number, fechaEgreso: string, causa: string) => void;
+  
+  // Gestión de empresas
+  addEmpresa: (empresa: Omit<Empresa, 'id'>) => void;
+  updateEmpresa: (id: number, data: Partial<Empresa>) => void;
   
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
@@ -128,6 +135,7 @@ const initialParametros: Parametros = {
   mes: new Date().getMonth() + 1,
   salario_minimo: 130.00,
   tasa_cambio: 36.15,
+  tasa_activa: 60.00,  // Tasa activa BCV para prestaciones sociales (default)
   umv: 3.42
 };
 
@@ -144,6 +152,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   successMessage: null,
   tasaCambio: 36.15,
+  tasaActiva: 60.00,
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -156,6 +165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setError: (error) => set({ error }),
   setSuccessMessage: (successMessage) => set({ successMessage }),
   setTasaCambio: (tasaCambio) => set({ tasaCambio }),
+  setTasaActiva: (tasaActiva) => set({ tasaActiva }),
   
   // Login simulado (en producción usar API real)
   login: async (username, password) => {
@@ -223,6 +233,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: maxId + 1
     };
     set({ empleados: [...empleados, nuevoEmpleado] });
+  },
+  
+  // Gestión de empresas
+  addEmpresa: (empresa) => {
+    const { empresas } = get();
+    const maxId = Math.max(...empresas.map(e => e.id), 0);
+    const nuevaEmpresa: Empresa = {
+      ...empresa,
+      id: maxId + 1
+    };
+    set({ empresas: [...empresas, nuevaEmpresa] });
+  },
+  
+  updateEmpresa: (id, data) => {
+    const { empresas } = get();
+    const nuevasEmpresas = empresas.map(e => 
+      e.id === id ? { ...e, ...data } : e
+    );
+    set({ empresas: nuevasEmpresas });
   },
   
   updateEmpleado: (id, data) => {
