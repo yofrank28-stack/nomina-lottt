@@ -18,6 +18,10 @@ export interface ParametrosNomina {
   tipoConcepto?: 'NOMINA' | 'UTILIDADES' | 'AGUINALDOS';
   /** Si se debe pagar bono vacacional en esta liquidación */
   pagarBonoVacacional?: boolean;
+  /** Bono de transporte - se paga en 2da quincena */
+  bonoTransporte?: number;
+  /** Cesta ticket - se paga en 2da quincena */
+  cestaTicket?: number;
 }
 
 export interface DataEmpleado {
@@ -59,6 +63,8 @@ export interface ResultadoLiquidacion {
   total_deducciones: number;
   neto_pagar: number;
   neto_pagar_bs: number;
+  bono_transporte: number;
+  cesta_ticket: number;
 }
 
 function calcularRetenciones(
@@ -173,9 +179,17 @@ export const engineLOTTT = {
     const tipoConcepto = parametros.tipoConcepto || 'NOMINA';
     const pagarBonoVacacional = parametros.pagarBonoVacacional || false;
     
-    const sueldoDiario = (sueldoBase * 12) / 360;
+    // Bono Transporte y Cesta Ticket: Solo en 2da quincena
+    const bonoTransporte = parametros.bonoTransporte || 0;
+    const cestaTicket = parametros.cestaTicket || 0;
+    
     const diasMes = 30;
-    const sueldoPeriodo = Math.round((sueldoDiario * diasLaborados) * 100) / 100;
+    const esSegundaQuincena = diasLaborados > 15;
+    
+    const sueldoDiario = (sueldoBase * 12) / 360;
+    const diasLaboradosCalc = 15; // Por quincena
+    const diasLaboradosFinal = diasLaborados > 0 ? diasLaborados : diasLaboradosCalc;
+    const sueldoPeriodo = Math.round((sueldoDiario * diasLaboradosFinal) * 100) / 100;
     
     // Bono Vacacional: Solo si está habilitado y es nómina
     let bonoVacacional = 0;
@@ -189,7 +203,7 @@ export const engineLOTTT = {
       utilidades = calcularUtilidades(new Date(fechaIngreso), sueldoBase);
     }
     
-    const otrasAsignaciones = 0;
+    const otrasAsignaciones = esSegundaQuincena ? bonoTransporte + cestaTicket : 0;
     const totalAsignaciones = sueldoPeriodo + bonoVacacional + utilidades + otrasAsignaciones;
     
     const retenciones = calcularRetenciones(sueldoBase, lunesPeriodo, parametros);
@@ -204,7 +218,7 @@ export const engineLOTTT = {
       sueldo_base: Math.round(sueldoPeriodo * 100) / 100,
       bono_vacacional: Math.round(bonoVacacional * 100) / 100,
       utilidades: Math.round(utilidades * 100) / 100,
-      otras_asignaciones: otrasAsignaciones,
+      otras_asignaciones: Math.round(otrasAsignaciones * 100) / 100,
       total_asignaciones: Math.round(totalAsignaciones * 100) / 100,
       ivss_trabajador: retenciones.ivss_trab,
       rpe_trabajador: retenciones.rpe_trab,
@@ -214,7 +228,10 @@ export const engineLOTTT = {
       otras_deducciones: 0,
       total_deducciones: totalDeducciones,
       neto_pagar: Math.round(netoPagar * 100) / 100,
-      neto_pagar_bs: Math.round(netoBs * 100) / 100
+      neto_pagar_bs: Math.round(netoBs * 100) / 100,
+      // Agregar bonificaciones para el receipt
+      bono_transporte: esSegundaQuincena ? bonoTransporte : 0,
+      cesta_ticket: esSegundaQuincena ? cestaTicket : 0
     };
   }
 };

@@ -630,7 +630,8 @@ function EmpleadosView() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validarCedulaUnica(formData.cedula, formData.empresa_id)) {
+    // Pass editMode as excludeId when editing to allow the same cedula
+    if (!validarCedulaUnica(formData.cedula, formData.empresa_id, editMode || undefined)) {
       return;
     }
     if (editMode) {
@@ -993,7 +994,7 @@ function EmpleadosView() {
 // VISTA: NÓMINA
 // ============================================================
 function NominaView() {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros } = useAppStore();
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
@@ -1012,13 +1013,15 @@ function NominaView() {
   const procesarNomina = async () => {
     setProcesando(true);
     
-    const parametros: ParametrosNomina = {
-      salarioMinimo: 130.00,
+    const parametrosNomina: ParametrosNomina = {
+      salarioMinimo: parametros.salario_minimo,
       numEmpleados: empleadosActivos.length,
       tasaCambio: tasaCambio,
-      umv: 3.42,
+      umv: parametros.umv,
       tipoConcepto,
-      pagarBonoVacacional
+      pagarBonoVacacional,
+      bonoTransporte: quincena === 2 ? parametros.bono_transporte : 0,
+      cestaTicket: quincena === 2 ? parametros.cesta_ticket : 0
     };
 
     const nuevasLiquidaciones: Liquidacion[] = empleadosActivos.map(emp => {
@@ -1035,7 +1038,7 @@ function NominaView() {
           tieneHijos: emp.tiene_hijos,
           cantidadHijos: emp.cantidad_hijos
         },
-        parametros
+        parametrosNomina
       );
 
       return {
@@ -1076,6 +1079,62 @@ function NominaView() {
   const totalDeducciones = liquidaciones.reduce((sum, l) => sum + l.total_deducciones, 0);
   const totalNeto = liquidaciones.reduce((sum, l) => sum + l.neto_pagar, 0);
   const totalBs = liquidaciones.reduce((sum, l) => sum + l.monto_bs, 0);
+
+  // Generar recibo PDF individual
+  const generarReciboPDF = (liq: any) => {
+    const emp = empleados.find(e => e.id === liq.empleado_id);
+    const empresa = empresas.find(e => e.id === liq.empresa_id);
+    
+    if (!emp || !empresa) return;
+
+    const data = {
+      empresa: {
+        nombre: empresa.nombre,
+        rif: empresa.rif,
+        direccion: empresa.direccion || "Venezuela"
+      },
+      empleado: {
+        nombre: emp.nombre,
+        apellido: emp.apellido || "",
+        cedula: emp.cedula,
+        cargo: emp.cargo || "Empleado",
+        departamento: emp.departamento || "General",
+        fecha_ingreso: emp.fecha_ingreso
+      },
+      periodo: {
+        ano: liq.ano,
+        mes: liq.mes,
+        quincena: liq.quincena,
+        dias_trabajados: liq.dias_trabajados,
+        fecha_pago: new Date().toLocaleDateString("es-VE")
+      },
+      asignaciones: [
+        { descripcion: "Sueldo Base", monto: liq.sueldo_base },
+        { descripcion: "Bono Vacacional", monto: liq.bono_vacacional },
+        { descripcion: "Utilidades", monto: liq.utilidades },
+        ...(liq.bono_transporte ? [{ descripcion: "Bono Transporte", monto: liq.bono_transporte }] : []),
+        ...(liq.cesta_ticket ? [{ descripcion: "Cesta Ticket", monto: liq.cesta_ticket }] : [])
+      ],
+      deducciones: [
+        { descripcion: "IVSS", monto: liq.ivss_trabajador },
+        { descripcion: "RPE", monto: liq.rpe_trabajador },
+        { descripcion: "FAOV", monto: liq.faov_trabajador },
+        { descripcion: "INCES", monto: liq.inces_trabajador }
+      ],
+      totales: {
+        total_asignaciones: liq.total_asignaciones,
+        total_deducciones: liq.total_deducciones,
+        neto_pagar: liq.neto_pagar,
+        tasa_cambio: tasaCambio,
+        neto_bs: liq.monto_bs
+      },
+      fecha_liquidacion: new Date().toLocaleDateString("es-VE")
+    };
+
+    const doc = generarReciboLiquidacion(data);
+    descargarPDF(doc, `recibo_${emp.cedula}_${liq.mes}_${liq.quincena}.pdf`);
+    setSuccessMessage("Recibo descargado");
+  };
 
   return (
     <div className="space-y-6">
@@ -1197,7 +1256,11 @@ function NominaView() {
                         Bs. {liq.monto_bs.toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button className="p-1 hover:bg-neutral-600 rounded text-neutral-400 hover:text-white">
+                        <button 
+                          onClick={() => generarReciboPDF(liq)}
+                          className="p-1 hover:bg-neutral-600 rounded text-neutral-400 hover:text-white"
+                          title="Descargar Recibo"
+                        >
                           <Download className="w-4 h-4" />
                         </button>
                       </td>
@@ -1259,7 +1322,9 @@ function ReportesView() {
       asignaciones: [
         { descripcion: "Sueldo Base", monto: liquidacion.sueldo_base },
         { descripcion: "Bono Vacacional", monto: liquidacion.bono_vacacional },
-        { descripcion: "Utilidades", monto: liquidacion.utilidades }
+        { descripcion: "Utilidades", monto: liquidacion.utilidades },
+        ...(liquidacion.bono_transporte ? [{ descripcion: "Bono Transporte", monto: liquidacion.bono_transporte }] : []),
+        ...(liquidacion.cesta_ticket ? [{ descripcion: "Cesta Ticket", monto: liquidacion.cesta_ticket }] : [])
       ],
       deducciones: [
         { descripcion: "IVSS", monto: liquidacion.ivss_trabajador },
@@ -1413,8 +1478,10 @@ function ReportesView() {
 // VISTA: PARÁMETROS
 // ============================================================
 function ParametrosView() {
-  const { parametros, setParametros, tasaCambio, setTasaCambio, setSuccessMessage } = useAppStore();
+  const { parametros, setParametros, tasaCambio, setTasaCambio, setSuccessMessage, updateParametros } = useAppStore();
   const [loadingTasa, setLoadingTasa] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [formParams, setFormParams] = useState(parametros);
 
   const handleActualizarTasa = async () => {
     setLoadingTasa(true);
@@ -1427,6 +1494,12 @@ function ParametrosView() {
       setSuccessMessage("Error al actualizar tasa");
     }
     setLoadingTasa(false);
+  };
+
+  const handleGuardarParams = () => {
+    updateParametros(formParams);
+    setSuccessMessage("Parámetros guardados correctamente");
+    setEditando(false);
   };
 
   return (
@@ -1466,17 +1539,101 @@ function ParametrosView() {
 
         {/* Parámetros Salariales */}
         <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
-          <h3 className="text-lg font-semibold text-white mb-4">Parámetros Salariales</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Parámetros Salariales</h3>
+            <button
+              onClick={() => { setEditando(!editando); setFormParams(parametros); }}
+              className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded"
+              title={editando ? "Cancelar" : "Editar"}
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+          </div>
           
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-neutral-300">Salario Mínimo (Bs)</span>
-              <span className="text-white font-semibold">Bs. {parametros.salario_minimo.toFixed(2)}</span>
+              {editando ? (
+                <input
+                  type="number"
+                  value={formParams.salario_minimo}
+                  onChange={(e) => setFormParams({ ...formParams, salario_minimo: parseFloat(e.target.value) })}
+                  className="w-32 px-3 py-1 bg-neutral-700 border border-neutral-600 rounded-lg text-white text-right"
+                  step="0.01"
+                />
+              ) : (
+                <span className="text-white font-semibold">Bs. {parametros.salario_minimo.toFixed(2)}</span>
+              )}
             </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-300">Tipo de Moneda</span>
+              {editando ? (
+                <select
+                  value={formParams.tipo_moneda}
+                  onChange={(e) => setFormParams({ ...formParams, tipo_moneda: e.target.value as 'USD' | 'VES' })}
+                  className="w-32 px-3 py-1 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                >
+                  <option value="USD">USD - Dólar</option>
+                  <option value="VES">VES - Bolívar</option>
+                </select>
+              ) : (
+                <span className="text-white font-semibold">{parametros.tipo_moneda}</span>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-300">Bono Transporte (2da Quincena)</span>
+              {editando ? (
+                <input
+                  type="number"
+                  value={formParams.bono_transporte}
+                  onChange={(e) => setFormParams({ ...formParams, bono_transporte: parseFloat(e.target.value) })}
+                  className="w-32 px-3 py-1 bg-neutral-700 border border-neutral-600 rounded-lg text-white text-right"
+                  step="0.01"
+                />
+              ) : (
+                <span className="text-white font-semibold">${parametros.bono_transporte.toFixed(2)}</span>
+              )}
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-300">Cesta Ticket (2da Quincena)</span>
+              {editando ? (
+                <input
+                  type="number"
+                  value={formParams.cesta_ticket}
+                  onChange={(e) => setFormParams({ ...formParams, cesta_ticket: parseFloat(e.target.value) })}
+                  className="w-32 px-3 py-1 bg-neutral-700 border border-neutral-600 rounded-lg text-white text-right"
+                  step="0.01"
+                />
+              ) : (
+                <span className="text-white font-semibold">${parametros.cesta_ticket.toFixed(2)}</span>
+              )}
+            </div>
+            
             <div className="flex items-center justify-between">
               <span className="text-neutral-300">Período Actual</span>
               <span className="text-white font-semibold">{parametros.mes}/{parametros.ano}</span>
             </div>
+            
+            {editando && (
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleGuardarParams}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Guardar
+                </button>
+                <button
+                  onClick={() => { setEditando(false); setFormParams(parametros); }}
+                  className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

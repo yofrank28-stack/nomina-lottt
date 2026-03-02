@@ -51,6 +51,9 @@ export interface Parametros {
   tasa_activa: number;  // Tasa activa BCV para prestaciones sociales
   umv: number;
   fecha_actualizacion_tasa?: string;
+  tipo_moneda: 'USD' | 'VES';  // Tipo de moneda
+  bono_transporte: number;  // Bono de transporte ($120)
+  cesta_ticket: number;  // Cesta ticket ($40)
 }
 
 export interface Liquidacion {
@@ -62,6 +65,7 @@ export interface Liquidacion {
   mes: number;
   quincena: number;
   dias_trabajados: number;
+  lunes_periodo?: number;
   sueldo_base: number;
   bono_vacacional: number;
   utilidades: number;
@@ -78,6 +82,9 @@ export interface Liquidacion {
   tipo_cambio_usd: number;
   monto_bs: number;
   fecha_liquidacion?: string;
+  // Bonificaciones especiales
+  bono_transporte?: number;
+  cesta_ticket?: number;
 }
 
 interface AppState {
@@ -113,6 +120,7 @@ interface AppState {
   setSuccessMessage: (message: string | null) => void;
   setTasaCambio: (tasa: number) => void;
   setTasaActiva: (tasa: number) => void;
+  updateParametros: (updates: Partial<Parametros>) => void;
   
   // Gestión de empleados
   addEmpleado: (empleado: Omit<Empleado, 'id'>) => void;
@@ -136,7 +144,10 @@ const initialParametros: Parametros = {
   salario_minimo: 130.00,
   tasa_cambio: 36.15,
   tasa_activa: 60.00,  // Tasa activa BCV para prestaciones sociales (default)
-  umv: 3.42
+  umv: 3.42,
+  tipo_moneda: 'USD',
+  bono_transporte: 120.00,  // Bono transporte $120
+  cesta_ticket: 40.00  // Cesta ticket $40
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -166,7 +177,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSuccessMessage: (successMessage) => set({ successMessage }),
   setTasaCambio: (tasaCambio) => set({ tasaCambio }),
   setTasaActiva: (tasaActiva) => set({ tasaActiva }),
-  
+  updateParametros: (updates) => set((state) => ({ 
+    parametros: { ...state.parametros, ...updates } 
+  })),
   // Login simulado (en producción usar API real)
   login: async (username, password) => {
     set({ loading: true, error: null });
