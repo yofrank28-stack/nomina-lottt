@@ -1,6 +1,12 @@
 // ============================================================
 // MOTOR DE CÁLCULOS LOTTT - Venezuela
 // Ley Orgánica del Trabajo, los Trabajadores y las Trabajadoras
+// Fórmutas Exactas según Ley:
+// - IVSS (4%): ((Sueldo Mensual * 12) / 52) * 0.04 * Lunes
+// - FAOV (1%): Sueldo Mensual * 0.01
+// - RPE (0.5%): ((Sueldo Mensual * 12) / 52) * 0.005 * Lunes
+// - INCES Trabajador (0.5%): Solo en Utilidades/Aguinaldos, NO en nómina
+// - INCES Patronal (2%): Solo si nómina >= 5 empleados
 // ============================================================
 
 export interface ParametrosNomina {
@@ -8,6 +14,10 @@ export interface ParametrosNomina {
   numEmpleados: number;
   tasaCambio: number;
   umv: number;
+  /** Tipo de concepto de pago: 'NOMINA' | 'UTILIDADES' | 'AGUINALDOS' */
+  tipoConcepto?: 'NOMINA' | 'UTILIDADES' | 'AGUINALDOS';
+  /** Si se debe pagar bono vacacional en esta liquidación */
+  pagarBonoVacacional?: boolean;
 }
 
 export interface DataEmpleado {
@@ -26,14 +36,16 @@ export interface ResultadoRetenciones {
   ivss_trab: number;
   rpe_trab: number;
   faov_trab: number;
-  inces: number;
+  inces_trabajador: number;  // Solo aplica en Utilidades/Aguinaldos
+  inces_patronal: number;    // 2% solo si >= 5 empleados
   total_deducciones: number;
 }
 
 export interface ResultadoLiquidacion {
   dias_trabajados: number;
+  lunes_periodo: number;
   sueldo_diario: number;
-  sueldo_base: number;
+ sueldo_base: number;
   bono_vacacional: number;
   utilidades: number;
   otras_asignaciones: number;
@@ -41,7 +53,8 @@ export interface ResultadoLiquidacion {
   ivss_trabajador: number;
   rpe_trabajador: number;
   faov_trabajador: number;
-  inces_trabajador: number;
+  inces_trabajador: number;   // Solo en Utilidades/Aguinaldos
+  inces_patronal: number;     // 2% si >= 5 empleados
   otras_deducciones: number;
   total_deducciones: number;
   neto_pagar: number;
@@ -57,18 +70,31 @@ function calcularRetenciones(
   const topeSemanal = (parametros.salarioMinimo * 5 * 12) / 52;
   const baseCalculo = Math.min(semanal, topeSemanal);
   
+  // IVSS (4%): ((Sueldo Mensual * 12) / 52) * 0.04 * Lunes
   const ivss_trab = baseCalculo * 0.04 * lunes;
-  const rpe_trab = baseCalculo * 0.005 * lunes;
-  const faov_trab = sueldoMensual * 0.01;
-  const inces = parametros.numEmpleados > 5 ? sueldoMensual * 0.005 : 0;
   
-  const total_deducciones = ivss_trab + rpe_trab + faov_trab + inces;
+  // RPE (0.5%): ((Sueldo Mensual * 12) / 52) * 0.005 * Lunes
+  const rpe_trab = baseCalculo * 0.005 * lunes;
+  
+  // FAOV (1%): Sueldo Mensual * 0.01
+  const faov_trab = sueldoMensual * 0.01;
+  
+  // INCES Trabajador (0.5%): SOLO aplica en Utilidades o Aguinaldos, NO en nómina ordinaria
+  const esConceptoEspecial = parametros.tipoConcepto === 'UTILIDADES' || parametros.tipoConcepto === 'AGUINALDOS';
+  const inces_trabajador = esConceptoEspecial ? baseCalculo * 0.005 * lunes : 0;
+  
+  // INCES Patronal (2%): Solo si la empresa tiene 5 o más empleados
+  const inces_patronal = parametros.numEmpleados >= 5 ? baseCalculo * 0.02 * lunes : 0;
+  
+  // Total deducciones trabajador (NO incluye INCES patronal - es costo empresa)
+  const total_deducciones = ivss_trab + rpe_trab + faov_trab + inces_trabajador;
   
   return {
     ivss_trab: Math.round(ivss_trab * 100) / 100,
     rpe_trab: Math.round(rpe_trab * 100) / 100,
     faov_trab: Math.round(faov_trab * 100) / 100,
-    inces: Math.round(inces * 100) / 100,
+    inces_trabajador: Math.round(inces_trabajador * 100) / 100,
+    inces_patronal: Math.round(inces_patronal * 100) / 100,
     total_deducciones: Math.round(total_deducciones * 100) / 100
   };
 }
@@ -81,7 +107,16 @@ function calcularBonoVacacional(
   const anosServicio = Math.floor(
     (hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
   );
-  const diasBono = Math.min(15 + anosServicio, 30);
+  
+  // Artículo 192 LOTTT - Días de bono vacacional por antigüedad
+  let diasBono: number;
+  if (anosServicio < 1) diasBono = 0;
+  else if (anosServicio < 2) diasBono = 7;   // 1-2 años
+  else if (anosServicio < 3) diasBono = 10;  // 2-3 años
+  else if (anosServicio < 5) diasBono = 12;  // 3-5 años
+  else if (anosServicio < 10) diasBono = 15; // 5-10 años
+  else diasBono = 18;                         // 10+ años (máximo)
+  
   const sueldoDiario = (sueldoMensual * 12) / 360;
   return Math.round(sueldoDiario * diasBono * 100) / 100;
 }
@@ -135,12 +170,25 @@ export const engineLOTTT = {
   ): ResultadoLiquidacion => {
     const { diasLaborados, lunesPeriodo, sueldoBase, fechaIngreso } = empleado;
     
+    const tipoConcepto = parametros.tipoConcepto || 'NOMINA';
+    const pagarBonoVacacional = parametros.pagarBonoVacacional || false;
+    
     const sueldoDiario = (sueldoBase * 12) / 360;
     const diasMes = 30;
     const sueldoPeriodo = Math.round((sueldoDiario * diasLaborados) * 100) / 100;
     
-    const bonoVacacional = calcularBonoVacacional(new Date(fechaIngreso), sueldoBase);
-    const utilidades = calcularUtilidades(new Date(fechaIngreso), sueldoBase);
+    // Bono Vacacional: Solo si está habilitado y es nómina
+    let bonoVacacional = 0;
+    if (pagarBonoVacacional && tipoConcepto === 'NOMINA') {
+      bonoVacacional = calcularBonoVacacional(new Date(fechaIngreso), sueldoBase);
+    }
+    
+    // Utilidades: Solo si es concepto especial
+    let utilidades = 0;
+    if (tipoConcepto === 'UTILIDADES') {
+      utilidades = calcularUtilidades(new Date(fechaIngreso), sueldoBase);
+    }
+    
     const otrasAsignaciones = 0;
     const totalAsignaciones = sueldoPeriodo + bonoVacacional + utilidades + otrasAsignaciones;
     
@@ -151,6 +199,7 @@ export const engineLOTTT = {
     
     return {
       dias_trabajados: diasLaborados,
+      lunes_periodo: lunesPeriodo,
       sueldo_diario: Math.round(sueldoDiario * 100) / 100,
       sueldo_base: Math.round(sueldoPeriodo * 100) / 100,
       bono_vacacional: Math.round(bonoVacacional * 100) / 100,
@@ -160,7 +209,8 @@ export const engineLOTTT = {
       ivss_trabajador: retenciones.ivss_trab,
       rpe_trabajador: retenciones.rpe_trab,
       faov_trabajador: retenciones.faov_trab,
-      inces_trabajador: retenciones.inces,
+      inces_trabajador: retenciones.inces_trabajador,
+      inces_patronal: retenciones.inces_patronal,
       otras_deducciones: 0,
       total_deducciones: totalDeducciones,
       neto_pagar: Math.round(netoPagar * 100) / 100,

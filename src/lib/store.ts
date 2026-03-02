@@ -69,7 +69,8 @@ export interface Liquidacion {
   ivss_trabajador: number;
   rpe_trabajador: number;
   faov_trabajador: number;
-  inces_trabajador: number;
+  inces_trabajador: number;   // Solo aplica en Utilidades/Aguinaldos
+  inces_patronal: number;      // 2% si >= 5 empleados
   otras_deducciones: number;
   total_deducciones: number;
   neto_pagar: number;
@@ -90,7 +91,7 @@ interface AppState {
   parametros: Parametros;
   
   // UI
-  currentView: 'dashboard' | 'empresas' | 'empleados' | 'nomina' | 'reportes' | 'parametros';
+  currentView: 'dashboard' | 'empresas' | 'empleados' | 'nomina' | 'reportes' | 'parametros' | 'contabilidad';
   loading: boolean;
   error: string | null;
   successMessage: string | null;
@@ -109,6 +110,12 @@ interface AppState {
   setError: (error: string | null) => void;
   setSuccessMessage: (message: string | null) => void;
   setTasaCambio: (tasa: number) => void;
+  
+  // Gestión de empleados
+  addEmpleado: (empleado: Omit<Empleado, 'id'>) => void;
+  updateEmpleado: (id: number, data: Partial<Empleado>) => void;
+  deleteEmpleado: (id: number) => void;
+  egressEmpleado: (id: number, fechaEgreso: string, causa: string) => void;
   
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
@@ -205,6 +212,40 @@ export const useAppStore = create<AppState>((set, get) => ({
       liquidaciones: [],
       currentView: 'dashboard'
     });
+  },
+  
+  // Gestión de empleados
+  addEmpleado: (empleado) => {
+    const { empleados } = get();
+    const maxId = Math.max(...empleados.map(e => e.id), 0);
+    const nuevoEmpleado: Empleado = {
+      ...empleado,
+      id: maxId + 1
+    };
+    set({ empleados: [...empleados, nuevoEmpleado] });
+  },
+  
+  updateEmpleado: (id, data) => {
+    const { empleados } = get();
+    const nuevosEmpleados = empleados.map(e => 
+      e.id === id ? { ...e, ...data } : e
+    );
+    set({ empleados: nuevosEmpleados });
+  },
+  
+  deleteEmpleado: (id) => {
+    const { empleados } = get();
+    set({ empleados: empleados.filter(e => e.id !== id) });
+  },
+  
+  egressEmpleado: (id, fechaEgreso, causa) => {
+    const { empleados } = get();
+    const nuevosEmpleados = empleados.map(e => 
+      e.id === id 
+        ? { ...e, estatus: 'EGRESADO' as const, fecha_egreso: fechaEgreso } 
+        : e
+    );
+    set({ empleados: nuevosEmpleados });
   }
 }));
 

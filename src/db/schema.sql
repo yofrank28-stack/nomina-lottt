@@ -1,6 +1,7 @@
 -- ============================================================
 -- GESTIÓN DE NÓMINA VENEZUELA - SQL Schema
 -- Sistema de Gestión de Nómina Multi-Empresa
+-- Incluye: Empleados, Nómina, Contabilidad, Provisiones LOTTT
 -- ============================================================
 
 -- ============================================================
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS empresas (
     email VARCHAR(100),
     lunes_mes INT DEFAULT 4,
     es_inces_contribuyente BOOLEAN DEFAULT FALSE,
+    num_empleados INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -74,8 +76,9 @@ CREATE TABLE IF NOT EXISTS historico_liquidaciones (
     periodo DATE NOT NULL,
     ano INT NOT NULL,
     mes INT NOT NULL,
-   -quincena INT NOT NULL CHECK (quincena IN (1, 2)),
+    quincena INT NOT NULL CHECK (quincena IN (1, 2)),
     dias_trabajados INT NOT NULL,
+    lunes_periodo INT DEFAULT 4,
     sueldo_base DECIMAL(15,2),
     bono_vacacional DECIMAL(15,2),
     utilidades DECIMAL(15,2),
@@ -85,11 +88,13 @@ CREATE TABLE IF NOT EXISTS historico_liquidaciones (
     rpe_trabajador DECIMAL(15,2),
     faov_trabajador DECIMAL(15,2),
     inces_trabajador DECIMAL(15,2),
+    inces_patronal DECIMAL(15,2),
     otras_deducciones DECIMAL(15,2),
     total_deducciones DECIMAL(15,2),
     neto_pagar DECIMAL(15,2),
     tipo_cambio_usd DECIMAL(15,4),
     monto_bs DECIMAL(15,2),
+    concepto_pago VARCHAR(20) DEFAULT 'NOMINA' CHECK (concepto_pago IN ('NOMINA', 'UTILIDADES', 'AGUINALDOS')),
     recibo_json JSONB,
     fecha_liquidacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_egreso DATE,
@@ -165,8 +170,8 @@ CREATE INDEX idx_usuarios_username ON usuarios(username);
 -- ============================================================
 -- Password: Admin123! (hash bcrypt)
 -- Este usuario se crea automáticamente
-INSERT INTO empresas (rif, nombre, lunes_mes, es_inces_contribuyente)
-VALUES ('J-00000000-0', 'ADMINISTRACIÓN MAESTRA', 4, false)
+INSERT INTO empresas (rif, nombre, lunes_mes, es_inces_contribuyente, num_empleados)
+VALUES ('J-00000000-0', 'ADMINISTRACIÓN MAESTRA', 4, false, 0)
 ON CONFLICT (rif) DO NOTHING;
 
 INSERT INTO usuarios (username, password_hash, nombre_completo, rol, empresa_id)
@@ -178,3 +183,94 @@ VALUES (
     1
 )
 ON CONFLICT (username) DO NOTHING;
+
+-- ============================================================
+-- TABLA: ASIENTOS CONTABLES
+-- Registro de Asientos de Diario Automáticos
+-- ============================================================
+CREATE TABLE IF NOT EXISTS asientos_contables (
+    id SERIAL PRIMARY KEY,
+    empresa_id INT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    periodo DATE NOT NULL,
+    ano INT NOT NULL,
+    mes INT NOT NULL,
+    quincena INT CHECK (quincena IN (1, 2)),
+    tipo_asiento VARCHAR(20) NOT NULL CHECK (tipo_asiento IN ('NOMINA', 'UTILIDADES', 'AGUINALDOS', 'CIERRE_MES')),
+    concepto VARCHAR(200) NOT NULL,
+    total_debe DECIMAL(15,2) NOT NULL,
+    total_haber DECIMAL(15,2) NOT NULL,
+    estado VARCHAR(20) DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'APROBADO', 'ANULADO')),
+   json_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(empresa_id, ano, mes, quincena, tipo_asiento)
+);
+
+-- ============================================================
+-- TABLA: DETALLE ASIENTOS CONTABLES
+-- Detalle de cada línea del asiento contable
+-- ============================================================
+CREATE TABLE IF NOT EXISTS detalle_asientos (
+    id SERIAL PRIMARY KEY,
+    asiento_id INT NOT NULL REFERENCES asientos_contables(id) ON DELETE CASCADE,
+    cuenta_contable VARCHAR(20) NOT NULL,
+    nombre_cuenta VARCHAR(100) NOT NULL,
+    debe DECIMAL(15,2) DEFAULT 0,
+    haber DECIMAL(15,2) DEFAULT 0,
+    referencia VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- TABLA: PROVISIONES LABORALES
+-- Provisiones de Pasivos Laborales (Art. 142a LOTTT)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS provisiones_laborales (
+    id SERIAL PRIMARY KEY,
+    empresa_id INT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    empleado_id INT REFERENCES empleados(id) ON DELETE SET NULL,
+    ano INT NOT NULL,
+    mes INT NOT NULL,
+    tipo_provision VARCHAR(50) NOT NULL CHECK (tipo_provision IN (
+        'GARANTIA_PRESTACIONES',  -- Art. 142a: 15 días trimestrales
+        'INTERESES_PRESTACIONES',  -- Intereses sobre Prestaciones (tasa activa BCV)
+        'ALICUOTA_UTILIDADES',     -- Alícuota de Utilidades
+        'ALICUOTA_BONO_VACACIONAL' -- Alícuota de Bono Vacacional
+    )),
+    monto_provision DECIMAL(15,2) NOT NULL,
+    tasa_aplicada DECIMAL(10,4),
+    base_calculo DECIMAL(15,2),
+    observaciones TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(empresa_id, empleado_id, ano, mes, tipo_provision)
+);
+
+-- ============================================================
+-- TABLA: HISTORICO EGRESADOS
+-- Registro Histórico de Empleados Egresados
+-- ============================================================
+CREATE TABLE IF NOT EXISTS historico_egresados (
+    id SERIAL PRIMARY KEY,
+    empleado_id INT NOT NULL,
+    empresa_id INT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    cedula VARCHAR(15) NOT NULL,
+    nombre_completo VARCHAR(200) NOT NULL,
+    fecha_ingreso DATE NOT NULL,
+    fecha_egreso DATE NOT NULL,
+    causa_egreso VARCHAR(50),
+    motivo TEXT,
+    liquidacion_final DECIMAL(15,2),
+    prestaciones_sociales DECIMAL(15,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- ÍNDICES PARA OPTIMIZACIÓN - CONTABILIDAD
+-- ============================================================
+CREATE INDEX idx_asientos_empresa_periodo ON asientos_contables(empresa_id, ano, mes);
+CREATE INDEX idx_detalle_asientos ON detalle_asientos(asiento_id);
+CREATE INDEX idx_provisiones_empresa_mes ON provisiones_laborales(empresa_id, ano, mes);
+CREATE INDEX idx_provisiones_empleado ON provisiones_laborales(empleado_id);
+CREATE INDEX idx_historico_egresados_cedula ON historico_egresados(cedula);
+CREATE INDEX idx_historico_egresados_empresa ON historico_egresados(empresa_id);

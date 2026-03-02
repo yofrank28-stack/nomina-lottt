@@ -19,7 +19,13 @@ import {
   RefreshCw,
   Download,
   Plus,
-  Search
+  Search,
+  Edit,
+  Trash2,
+  UserMinus,
+  Wallet,
+  BookOpen,
+  PenTool
 } from "lucide-react";
 
 // ============================================================
@@ -157,7 +163,8 @@ function Dashboard() {
     empleados: <EmpleadosView />,
     nomina: <NominaView />,
     reportes: <ReportesView />,
-    parametros: <ParametrosView />
+    parametros: <ParametrosView />,
+    contabilidad: <ContabilidadView />
   };
 
   return (
@@ -239,6 +246,7 @@ function Dashboard() {
               { id: 'nomina', label: 'Nómina', icon: Receipt },
               { id: 'reportes', label: 'Reportes', icon: FileText },
               { id: 'parametros', label: 'Parámetros', icon: Settings },
+              { id: 'contabilidad', label: 'Contabilidad', icon: PenTool },
             ].map(item => (
               <button
                 key={item.id}
@@ -523,9 +531,13 @@ function EmpresasView() {
 // VISTA: EMPLEADOS
 // ============================================================
 function EmpleadosView() {
-  const { empleados, empresas, setSuccessMessage, setError } = useAppStore();
+  const { empleados, empresas, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [editMode, setEditMode] = useState<number | null>(null);
+  const [egresandoId, setEgresandoId] = useState<number | null>(null);
+  const [fechaEgreso, setFechaEgreso] = useState("");
+  const [causaEgreso, setCausaEgreso] = useState("");
   const [formData, setFormData] = useState({
     empresa_id: 2,
     cedula: "",
@@ -543,9 +555,9 @@ function EmpleadosView() {
   });
 
   // Validar cédula única
-  const validarCedulaUnica = (cedula: string, empresa_id: number): boolean => {
+  const validarCedulaUnica = (cedula: string, empresa_id: number, excludeId?: number): boolean => {
     const existe = empleados.some(
-      e => e.empresa_id === empresa_id && e.cedula === cedula
+      e => e.empresa_id === empresa_id && e.cedula === cedula && e.id !== excludeId
     );
     if (existe) {
       setError("ERROR: La Cédula ya está registrada para esta empresa. No se permiten duplicados.");
@@ -559,8 +571,69 @@ function EmpleadosView() {
     if (!validarCedulaUnica(formData.cedula, formData.empresa_id)) {
       return;
     }
-    setSuccessMessage("Empleado registrado correctamente");
+    if (editMode) {
+      updateEmpleado(editMode, formData);
+      setSuccessMessage("Empleado actualizado correctamente");
+      setEditMode(null);
+    } else {
+      addEmpleado(formData);
+      setSuccessMessage("Empleado registrado correctamente");
+    }
     setShowForm(false);
+    setFormData({
+      empresa_id: 2,
+      cedula: "",
+      nombre: "",
+      apellido: "",
+      fecha_nacimiento: "",
+      fecha_ingreso: "",
+      cargo: "",
+      departamento: "",
+      sueldo_base_usd: 0,
+      estatus: "ACTIVO",
+      tipo_contrato: "INDEFINIDO",
+      tiene_hijos: false,
+      cantidad_hijos: 0
+    });
+  };
+
+  const handleEdit = (empleado: any) => {
+    setFormData({
+      empresa_id: empleado.empresa_id,
+      cedula: empleado.cedula,
+      nombre: empleado.nombre,
+      apellido: empleado.apellido || "",
+      fecha_nacimiento: empleado.fecha_nacimiento || "",
+      fecha_ingreso: empleado.fecha_ingreso,
+      cargo: empleado.cargo || "",
+      departamento: empleado.departamento || "",
+      sueldo_base_usd: empleado.sueldo_base_usd,
+      estatus: empleado.estatus,
+      tipo_contrato: empleado.tipo_contrato,
+      tiene_hijos: empleado.tiene_hijos,
+      cantidad_hijos: empleado.cantidad_hijos
+    });
+    setEditMode(empleado.id);
+    setShowForm(true);
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm("¿Está seguro de eliminar este empleado? Esta acción no se puede deshacer.")) {
+      deleteEmpleado(id);
+      setSuccessMessage("Empleado eliminado correctamente");
+    }
+  };
+
+  const handleEgreso = () => {
+    if (egresandoId && fechaEgreso) {
+      egressEmpleado(egresandoId, fechaEgreso, causaEgreso);
+      setSuccessMessage("Empleado egressado correctamente");
+      setEgresandoId(null);
+      setFechaEgreso("");
+      setCausaEgreso("");
+    } else {
+      setError("Debe seleccionar una fecha de egreso");
+    }
   };
 
   const filteredEmpleados = empleados.filter(e =>
@@ -722,6 +795,7 @@ function EmpleadosView() {
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Cargo</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Sueldo USD</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Estatus</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-neutral-300 uppercase">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-700">
@@ -743,12 +817,88 @@ function EmpleadosView() {
                       {empleado.estatus}
                     </span>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleEdit(empleado)}
+                        className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      {empleado.estatus !== 'EGRESADO' && (
+                        <button
+                          onClick={() => setEgresandoId(empleado.id)}
+                          className="p-1.5 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded"
+                          title="Egresar"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(empleado.id)}
+                        className="p-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {/* Modal de Egreso */}
+      {egresandoId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-neutral-800 rounded-xl p-6 max-w-md w-full mx-4 border border-neutral-700">
+            <h3 className="text-lg font-semibold text-white mb-4">Egresar Empleado</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-neutral-300 mb-1">Fecha de Egreso</label>
+                <input
+                  type="date"
+                  value={fechaEgreso}
+                  onChange={(e) => setFechaEgreso(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-300 mb-1">Causa del Egreso</label>
+                <select
+                  value={causaEgreso}
+                  onChange={(e) => setCausaEgreso(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="RENUNCIA">Renuncia</option>
+                  <option value="DESPIDO">Despido</option>
+                  <option value="JUBILACION">Jubilación</option>
+                  <option value="OTRO">Otro</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleEgreso}
+                  className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg"
+                >
+                  Confirmar Egreso
+                </button>
+                <button
+                  onClick={() => { setEgresandoId(null); setFechaEgreso(""); setCausaEgreso(""); }}
+                  className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -760,6 +910,8 @@ function NominaView() {
   const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones } = useAppStore();
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
+  const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
+  const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
 
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO' && e.empresa_id !== 1);
 
@@ -770,7 +922,9 @@ function NominaView() {
       salarioMinimo: 130.00,
       numEmpleados: empleadosActivos.length,
       tasaCambio: tasaCambio,
-      umv: 3.42
+      umv: 3.42,
+      tipoConcepto,
+      pagarBonoVacacional
     };
 
     const nuevasLiquidaciones: Liquidacion[] = empleadosActivos.map(emp => {
@@ -798,6 +952,7 @@ function NominaView() {
         mes: new Date().getMonth() + 1,
         quincena,
         dias_trabajados: result.dias_trabajados,
+        lunes_periodo: result.lunes_periodo,
         sueldo_base: result.sueldo_base,
         bono_vacacional: result.bono_vacacional,
         utilidades: result.utilidades,
@@ -807,6 +962,7 @@ function NominaView() {
         rpe_trabajador: result.rpe_trabajador,
         faov_trabajador: result.faov_trabajador,
         inces_trabajador: result.inces_trabajador,
+        inces_patronal: result.inces_patronal,
         otras_deducciones: result.otras_deducciones,
         total_deducciones: result.total_deducciones,
         neto_pagar: result.neto_pagar,
@@ -850,6 +1006,34 @@ function NominaView() {
               <option value={2}>2da Quincena (16-30)</option>
             </select>
           </div>
+          
+          <div>
+            <label className="block text-sm text-neutral-300 mb-1">Concepto de Pago</label>
+            <select
+              value={tipoConcepto}
+              onChange={(e) => setTipoConcepto(e.target.value as any)}
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+            >
+              <option value="NOMINA">Nómina Ordinaria</option>
+              <option value="UTILIDADES">Utilidades</option>
+              <option value="AGUINALDOS">Aguinaldos</option>
+            </select>
+          </div>
+
+          {tipoConcepto === 'NOMINA' && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-neutral-700 rounded-lg">
+              <input
+                type="checkbox"
+                id="bonoVacacional"
+                checked={pagarBonoVacacional}
+                onChange={(e) => setPagarBonoVacacional(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="bonoVacacional" className="text-sm text-neutral-300">
+                PAGAR BONO VACACIONAL
+              </label>
+            </div>
+          )}
           
           <div className="flex items-end gap-2">
             <button
@@ -962,7 +1146,8 @@ function ReportesView() {
         ano: liquidacion.ano,
         mes: liquidacion.mes,
         quincena: liquidacion.quincena,
-        dias_trabajados: liquidacion.dias_trabajados
+        dias_trabajados: liquidacion.dias_trabajados,
+        fecha_pago: new Date().toLocaleDateString("es-VE")
       },
       asignaciones: [
         { descripcion: "Sueldo Base", monto: liquidacion.sueldo_base },
@@ -1015,7 +1200,8 @@ function ReportesView() {
           ano: liq.ano,
           mes: liq.mes,
           quincena: liq.quincena,
-          dias_trabajados: liq.dias_trabajados
+          dias_trabajados: liq.dias_trabajados,
+          fecha_pago: new Date().toLocaleDateString("es-VE")
         },
         asignaciones: [
           { descripcion: "Sueldo Base", monto: liq.sueldo_base },
@@ -1181,10 +1367,6 @@ function ParametrosView() {
               <span className="text-white font-semibold">Bs. {parametros.salario_minimo.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-neutral-300">Unidad Mutable (UMV)</span>
-              <span className="text-white font-semibold">Bs. {parametros.umv.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
               <span className="text-neutral-300">Período Actual</span>
               <span className="text-white font-semibold">{parametros.mes}/{parametros.ano}</span>
             </div>
@@ -1229,6 +1411,274 @@ function ParametrosView() {
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// VISTA: CONTABILIDAD
+// ============================================================
+function ContabilidadView() {
+  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, setError } = useAppStore();
+  const [ano, setAno] = useState(new Date().getFullYear());
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [procesando, setProcesando] = useState(false);
+
+  const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO' && e.empresa_id !== 1);
+  
+  // Calcular provisiones laborales
+  const calcularProvisiones = () => {
+    const nominaTotal = empleadosActivos.reduce((sum, e) => sum + e.sueldo_base_usd, 0);
+    const diarioSueldo = nominaTotal / 30;
+    
+    // Garantía de Prestaciones (Art. 142a): 15 días por trimestre
+    const garantia = (diarioSueldo * 15) / 3; // Trimestral
+    
+    // Intereses sobre Prestaciones (tasa activa BCV aproximadamente 60%)
+    const tasaActiva = 0.60; // 60% anual
+    const intereses = garantia * tasaActiva / 4; // Trimestral
+    
+    // Alícuota de Utilidades (30 días)
+    const utilidades = diarioSueldo * 30 / 12; // Mensual
+    
+    // Alícuota de Bono Vacacional (según antigüedad)
+    const bonoVacacional = diarioSueldo * 15 / 12; // Promedio
+    
+    return {
+      garantia: Math.round(garantia * 100) / 100,
+      intereses: Math.round(intereses * 100) / 100,
+      utilidades: Math.round(utilidades * 100) / 100,
+      bonoVacacional: Math.round(bonoVacacional * 100) / 100
+    };
+  };
+
+  const provisiones = calcularProvisiones();
+  const totalProvisiones = provisiones.garantia + provisiones.intereses + provisiones.utilidades + provisiones.bonoVacacional;
+
+  // Calcular totales de nómina
+  const totalNeto = liquidaciones.reduce((sum, l) => sum + l.neto_pagar, 0);
+  const totalIvss = liquidaciones.reduce((sum, l) => sum + l.ivss_trabajador, 0);
+  const totalFaov = liquidaciones.reduce((sum, l) => sum + l.faov_trabajador, 0);
+  const totalRpe = liquidaciones.reduce((sum, l) => sum + l.rpe_trabajador, 0);
+  const totalIncesPatronal = liquidaciones.reduce((sum, l) => sum + (l.inces_patronal || 0), 0);
+
+  const generarAsientoDiario = () => {
+    if (liquidaciones.length === 0) {
+      setError("No hay liquidaciones procesadas");
+      return;
+    }
+
+    const empresa = empresas.find(e => e.id === 2);
+    if (!empresa) return;
+
+    // Generar datos para el asiento
+    const dataLiquidaciones = liquidaciones.map(liq => {
+      const emp = empleados.find(e => e.id === liq.empleado_id);
+      return {
+        empresa: { nombre: empresa.nombre, rif: empresa.rif, direccion: empresa.direccion || "" },
+        empleado: { nombre: emp?.nombre || "", apellido: emp?.apellido || "", cedula: emp?.cedula || "", cargo: emp?.cargo || "", departamento: emp?.departamento || "", fecha_ingreso: emp?.fecha_ingreso || "" },
+        periodo: { ano: liq.ano, mes: liq.mes, quincena: liq.quincena, dias_trabajados: liq.dias_trabajados },
+        asignaciones: [
+          { descripcion: "Sueldo Base", monto: liq.sueldo_base },
+          { descripcion: "Bono Vacacional", monto: liq.bono_vacacional },
+          { descripcion: "Utilidades", monto: liq.utilidades }
+        ],
+        deducciones: [
+          { descripcion: "IVSS", monto: liq.ivss_trabajador },
+          { descripcion: "RPE", monto: liq.rpe_trabajador },
+          { descripcion: "FAOV", monto: liq.faov_trabajador },
+          { descripcion: "INCES", monto: liq.inces_trabajador }
+        ],
+        totales: {
+          total_asignaciones: liq.total_asignaciones,
+          total_deducciones: liq.total_deducciones,
+          neto_pagar: liq.neto_pagar,
+          tasa_cambio: tasaCambio,
+          neto_bs: liq.monto_bs
+        },
+        fecha_liquidacion: new Date().toLocaleDateString("es-VE")
+      };
+    });
+
+    const { generarAsientoContable, descargarPDF } = require("../lib/pdf-generator");
+    const doc = generarAsientoContable(dataLiquidaciones, empresa, { ano, mes, quincena: 1 }, provisiones);
+    descargarPDF(doc, `asiento_diario_${mes}_${ano}.pdf`);
+    setSuccessMessage("Asiento de diario generado");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white">Contabilidad y Provisiones</h2>
+        <p className="text-neutral-400">Asientos contables y provisiones laborales LOTTT</p>
+      </div>
+
+      {/* Período */}
+      <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <label className="block text-sm text-neutral-300 mb-1">Año</label>
+            <select
+              value={ano}
+              onChange={(e) => setAno(parseInt(e.target.value))}
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+            >
+              {[2024, 2025, 2026].map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-neutral-300 mb-1">Mes</label>
+            <select
+              value={mes}
+              onChange={(e) => setMes(parseInt(e.target.value))}
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+            >
+              {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Dicembre"].map((m, i) => (
+                <option key={i + 1} value={i + 1}>{m}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Provisiones Laborales */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Wallet className="w-5 h-5 text-purple-400" />
+            Provisiones del Mes
+          </h3>
+          
+          <div className="space-y-3">
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">Garantía PS (Art. 142a)</span>
+              <span className="text-white font-medium">${provisiones.garantia.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">Intereses sobre PS</span>
+              <span className="text-white font-medium">${provisiones.intereses.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">Alícuota Utilidades</span>
+              <span className="text-white font-medium">${provisiones.utilidades.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">Alícuota Bono Vacacional</span>
+              <span className="text-white font-medium">${provisiones.bonoVacacional.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-purple-600/20 rounded-lg border border-purple-600">
+              <span className="text-white font-bold">TOTAL PROVISIONES</span>
+              <span className="text-purple-400 font-bold">${totalProvisiones.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Resumen Nómina */}
+        <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-blue-400" />
+            Resumen Nómina
+          </h3>
+          
+          <div className="space-y-3">
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">Neto a Pagar</span>
+              <span className="text-green-400 font-medium">${totalNeto.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">IVSS</span>
+              <span className="text-red-400 font-medium">${totalIvss.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">FAOV</span>
+              <span className="text-red-400 font-medium">${totalFaov.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">RPE</span>
+              <span className="text-red-400 font-medium">${totalRpe.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
+              <span className="text-neutral-300">INCES Patronal</span>
+              <span className="text-red-400 font-medium">${totalIncesPatronal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Asiento de Diario */}
+      <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+        <h3 className="text-lg font-semibold text-white mb-4">Generar Asiento de Diario</h3>
+        <p className="text-neutral-400 text-sm mb-4">
+          Genera el asiento contable automático con gasto de nómina, bancos y provisiones de pasivos laborales.
+        </p>
+        <button
+          onClick={generarAsientoDiario}
+          disabled={liquidaciones.length === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+        >
+          <PenTool className="w-4 h-4" />
+          Generar Asiento Contable
+        </button>
+        {liquidaciones.length === 0 && (
+          <p className="text-yellow-400 text-sm mt-2">⚠️ Debe procesar la nómina primero</p>
+        )}
+      </div>
+
+      {/* Detalle Contable */}
+      <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+        <h3 className="text-lg font-semibold text-white mb-4">Detalle Contable del Período</h3>
+        
+        <table className="w-full">
+          <thead className="bg-neutral-700">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Cuenta</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Debe (USD)</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Haber (USD)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-700">
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">Gasto de Sueldos</td>
+              <td className="px-4 py-3 text-right text-green-400">${liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0).toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">-</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">Bancos</td>
+              <td className="px-4 py-3 text-right">-</td>
+              <td className="px-4 py-3 text-right text-red-400">${totalNeto.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">IVSS por Pagar</td>
+              <td className="px-4 py-3 text-right">-</td>
+              <td className="px-4 py-3 text-right text-red-400">${totalIvss.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">FAOV por Pagar</td>
+              <td className="px-4 py-3 text-right">-</td>
+              <td className="px-4 py-3 text-right text-red-400">${totalFaov.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">RPE por Pagar</td>
+              <td className="px-4 py-3 text-right">-</td>
+              <td className="px-4 py-3 text-right text-red-400">${totalRpe.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 text-white font-medium">Provisiones Laborales</td>
+              <td className="px-4 py-3 text-right text-green-400">${totalProvisiones.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right">-</td>
+            </tr>
+          </tbody>
+          <tfoot className="bg-neutral-700 font-bold">
+            <tr>
+              <td className="px-4 py-3 text-white">TOTALES</td>
+              <td className="px-4 py-3 text-right text-green-400">${(liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0) + totalProvisiones).toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-red-400">${(totalNeto + totalIvss + totalFaov + totalRpe).toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
