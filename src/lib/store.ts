@@ -36,7 +36,8 @@ export interface Empleado {
   fecha_egreso?: string;
   cargo?: string;
   departamento?: string;
-  sueldo_base_usd: number;
+  sueldo_base: number;  // Monto del sueldo base
+  tipo_moneda_sueldo: 'USD' | 'VES';  // Tipo de moneda del sueldo base
   estatus: 'ACTIVO' | 'VACACIONES' | 'EGRESADO' | 'SUSPENDIDO';
   tipo_contrato: 'FIJO' | 'INDEFINIDO' | 'TEMPORAL';
   tiene_hijos: boolean;
@@ -202,9 +203,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         ];
         
         const empleados: Empleado[] = [
-          { id: 1, empresa_id: 2, cedula: 'V-12345678', nombre: 'Juan', apellido: 'Pérez', fecha_ingreso: '2020-01-15', sueldo_base_usd: 500, estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 2, cargo: 'Analista', departamento: 'Contabilidad' },
-          { id: 2, empresa_id: 2, cedula: 'V-87654321', nombre: 'María', apellido: 'García', fecha_ingreso: '2021-06-01', sueldo_base_usd: 450, estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Asistente', departamento: 'Administración' },
-          { id: 3, empresa_id: 2, cedula: 'E-12345678', nombre: 'Carlos', apellido: 'López', fecha_ingreso: '2019-03-20', sueldo_base_usd: 600, estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 1, cargo: 'Gerente', departamento: 'Gerencia' }
+          { id: 1, empresa_id: 2, cedula: 'V-12345678', nombre: 'Juan', apellido: 'Pérez', fecha_ingreso: '2020-01-15', sueldo_base: 500, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 2, cargo: 'Analista', departamento: 'Contabilidad' },
+          { id: 2, empresa_id: 2, cedula: 'V-87654321', nombre: 'María', apellido: 'García', fecha_ingreso: '2021-06-01', sueldo_base: 450, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Asistente', departamento: 'Administración' },
+          { id: 3, empresa_id: 2, cedula: 'E-12345678', nombre: 'Carlos', apellido: 'López', fecha_ingreso: '2019-03-20', sueldo_base: 600, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 1, cargo: 'Gerente', departamento: 'Gerencia' }
         ];
         
         set({

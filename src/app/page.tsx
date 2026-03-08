@@ -159,7 +159,8 @@ function Dashboard() {
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
 
   // Calcular nómina total
-  const nominaTotal = empleadosActivos.reduce((sum, e) => sum + e.sueldo_base_usd, 0);
+  const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base : e.sueldo_base / tasaCambio; return sum + monto; }, 0);
+  const nominaBs = nominaTotal;
 
   const views = {
     dashboard: <DashboardView />,
@@ -291,8 +292,7 @@ function Dashboard() {
 function DashboardView() {
   const { empresas, empleados, tasaCambio } = useAppStore();
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
-  const nominaTotal = empleadosActivos.reduce((sum, e) => sum + e.sueldo_base_usd, 0);
-  const nominaBs = nominaTotal * tasaCambio;
+  const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base * tasaCambio : e.sueldo_base; return sum + monto; }, 0);
 
   const stats = [
     {
@@ -315,7 +315,7 @@ function DashboardView() {
     },
     {
       label: "Nómina Mensual (Bs)",
-      value: `Bs. ${nominaBs.toFixed(2)}`,
+      value: `Bs. ${nominaTotal.toFixed(2)}`,
       icon: Calculator,
       color: "bg-purple-600"
     }
@@ -609,7 +609,8 @@ function EmpleadosView() {
     fecha_ingreso: "",
     cargo: "",
     departamento: "",
-    sueldo_base_usd: 0,
+    sueldo_base: 0,
+    tipo_moneda_sueldo: "USD" as "USD" | "VES",
     estatus: "ACTIVO" as const,
     tipo_contrato: "INDEFINIDO" as const,
     tiene_hijos: false,
@@ -652,7 +653,8 @@ function EmpleadosView() {
       fecha_ingreso: "",
       cargo: "",
       departamento: "",
-      sueldo_base_usd: 0,
+      sueldo_base: 0,
+      tipo_moneda_sueldo: "USD",
       estatus: "ACTIVO",
       tipo_contrato: "INDEFINIDO",
       tiene_hijos: false,
@@ -670,7 +672,8 @@ function EmpleadosView() {
       fecha_ingreso: empleado.fecha_ingreso,
       cargo: empleado.cargo || "",
       departamento: empleado.departamento || "",
-      sueldo_base_usd: empleado.sueldo_base_usd,
+      sueldo_base: empleado.sueldo_base,
+      tipo_moneda_sueldo: empleado.tipo_moneda_sueldo || "USD",
       estatus: empleado.estatus,
       tipo_contrato: empleado.tipo_contrato,
       tiene_hijos: empleado.tiene_hijos,
@@ -809,16 +812,26 @@ function EmpleadosView() {
               />
             </div>
             <div>
-              <label className="block text-sm text-neutral-300 mb-1">Sueldo Base USD *</label>
-              <input
-                type="number"
-                value={formData.sueldo_base_usd}
-                onChange={(e) => setFormData({ ...formData, sueldo_base_usd: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
-                step="0.01"
-                min="0"
-                required
-              />
+              <label className="block text-sm text-neutral-300 mb-1">Sueldo Base *</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={formData.sueldo_base}
+                  onChange={(e) => setFormData({ ...formData, sueldo_base: parseFloat(e.target.value) })}
+                  className="flex-1 px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                  step="0.01"
+                  min="0"
+                  required
+                />
+                <select
+                  value={formData.tipo_moneda_sueldo}
+                  onChange={(e) => setFormData({ ...formData, tipo_moneda_sueldo: e.target.value as 'USD' | 'VES' })}
+                  className="px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                >
+                  <option value="USD">USD</option>
+                  <option value="VES">VES</option>
+                </select>
+              </div>
             </div>
             <div>
               <label className="block text-sm text-neutral-300 mb-1">Cargo</label>
@@ -894,7 +907,7 @@ function EmpleadosView() {
                   <td className="px-4 py-3 text-white">{empleado.nombre} {empleado.apellido}</td>
                   <td className="px-4 py-3 text-neutral-300">{empresa?.nombre || 'N/A'}</td>
                   <td className="px-4 py-3 text-neutral-300">{empleado.cargo || '-'}</td>
-                  <td className="px-4 py-3 text-white font-medium">${empleado.sueldo_base_usd.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-white font-medium">{empleado.tipo_moneda_sueldo === "USD" ? "$" : "Bs. "}{empleado.sueldo_base.toFixed(2)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs rounded ${
                       empleado.estatus === 'ACTIVO' ? 'bg-green-600/20 text-green-400' :
@@ -1033,7 +1046,7 @@ function NominaView() {
         {
           diasLaborados: dias,
           lunesPeriodo: lunes,
-          sueldoBase: emp.sueldo_base_usd,
+          sueldoBase: emp.tipo_moneda_sueldo === "USD" ? emp.sueldo_base : emp.sueldo_base / tasaCambio,
           fechaIngreso: emp.fecha_ingreso,
           tieneHijos: emp.tiene_hijos,
           cantidadHijos: emp.cantidad_hijos
@@ -1693,7 +1706,7 @@ function ContabilidadView() {
   
   // Calcular provisiones laborales
   const calcularProvisiones = () => {
-    const nominaTotal = empleadosActivos.reduce((sum, e) => sum + e.sueldo_base_usd, 0);
+    const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base : e.sueldo_base / tasaCambio; return sum + monto; }, 0);
     const diarioSueldo = nominaTotal / 30;
     
     // Garantía de Prestaciones (Art. 142a): 15 días por trimestre
