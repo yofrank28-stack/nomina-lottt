@@ -291,7 +291,7 @@ function Dashboard() {
 // ============================================================
 function DashboardView() {
   const { empresas, empleados, tasaCambio } = useAppStore();
-  const [mostrarEnBs, setMostrarEnBs] = useState(false);
+  const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
   
   // Calcular nómina mensual en USD y BS
@@ -625,7 +625,7 @@ function EmpresasView() {
 // VISTA: EMPLEADOS
 // ============================================================
 function EmpleadosView() {
-  const { empleados, empresas, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editMode, setEditMode] = useState<number | null>(null);
@@ -940,7 +940,7 @@ function EmpleadosView() {
                   <td className="px-4 py-3 text-white">{empleado.nombre} {empleado.apellido}</td>
                   <td className="px-4 py-3 text-neutral-300">{empresa?.nombre || 'N/A'}</td>
                   <td className="px-4 py-3 text-neutral-300">{empleado.cargo || '-'}</td>
-                  <td className="px-4 py-3 text-white font-medium">{empleado.tipo_moneda_sueldo === "USD" ? "$" : "Bs. "}{empleado.sueldo_base.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-white font-medium">{empleado.tipo_moneda_sueldo === "USD" ? "$" : "Bs. "}{empleado.tipo_moneda_sueldo === "USD" ? empleado.sueldo_base.toFixed(2) : (empleado.sueldo_base * tasaCambio).toFixed(2)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs rounded ${
                       empleado.estatus === 'ACTIVO' ? 'bg-green-600/20 text-green-400' :
@@ -1041,6 +1041,7 @@ function EmpleadosView() {
 // ============================================================
 function NominaView() {
   const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros } = useAppStore();
+  const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
@@ -1189,6 +1190,30 @@ function NominaView() {
           <h2 className="text-2xl font-bold text-white">Procesar Nómina</h2>
           <p className="text-neutral-400">Cálculos según Ley LOTTT Venezuela</p>
         </div>
+        
+        {/* Selector de Moneda */}
+        <div className="flex items-center gap-2 bg-neutral-800 rounded-lg p-1 border border-neutral-700">
+          <button
+            onClick={() => setMostrarEnBs(false)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              !mostrarEnBs 
+                ? 'bg-blue-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            USD
+          </button>
+          <button
+            onClick={() => setMostrarEnBs(true)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mostrarEnBs 
+                ? 'bg-green-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            BS
+          </button>
+        </div>
       </div>
 
       {/* Controles */}
@@ -1273,16 +1298,24 @@ function NominaView() {
               <thead className="bg-neutral-700">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Empleado</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Asignaciones</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Deducciones</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Neto USD</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Neto Bs</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Asignaciones (Bs)' : 'Asignaciones ($)'}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Deducciones (Bs)' : 'Deducciones ($)'}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Neto a Pagar (Bs)' : 'Neto a Pagar ($)'}</th>
+                  {mostrarEnBs && (
+                    <th className="px-4 py-3 text-right text-xs font-medium text-neutral-400 uppercase">Equiv. USD</th>
+                  )}
                   <th className="px-4 py-3 text-center text-xs font-medium text-neutral-300 uppercase">Recibo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-700">
                 {liquidaciones.map((liq, idx) => {
                   const emp = empleados.find(e => e.id === liq.empleado_id);
+                  const netoUsd = liq.neto_pagar;
+                  const netoBs = liq.monto_bs;
+                  const asignacionesUsd = liq.total_asignaciones;
+                  const asignacionesBs = liq.total_asignaciones * tasaCambio;
+                  const deduccionesUsd = liq.total_deducciones;
+                  const deduccionesBs = liq.total_deducciones * tasaCambio;
                   return (
                     <tr key={idx} className="hover:bg-neutral-750">
                       <td className="px-4 py-3 text-white">
@@ -1290,17 +1323,19 @@ function NominaView() {
                         <div className="text-xs text-neutral-400">{emp?.cedula}</div>
                       </td>
                       <td className="px-4 py-3 text-right text-green-400">
-                        ${liq.total_asignaciones.toFixed(2)}
+                        {mostrarEnBs ? `Bs. ${asignacionesBs.toFixed(2)}` : `${asignacionesUsd.toFixed(2)}`}
                       </td>
                       <td className="px-4 py-3 text-right text-red-400">
-                        ${liq.total_deducciones.toFixed(2)}
+                        {mostrarEnBs ? `Bs. ${deduccionesBs.toFixed(2)}` : `${deduccionesUsd.toFixed(2)}`}
                       </td>
                       <td className="px-4 py-3 text-right text-white font-bold">
-                        ${liq.neto_pagar.toFixed(2)}
+                        {mostrarEnBs ? `Bs. ${netoBs.toFixed(2)}` : `${netoUsd.toFixed(2)}`}
                       </td>
-                      <td className="px-4 py-3 text-right text-yellow-400 font-medium">
-                        Bs. {liq.monto_bs.toFixed(2)}
-                      </td>
+                      {mostrarEnBs && (
+                        <td className="px-4 py-3 text-right text-neutral-400">
+                          ${netoUsd.toFixed(2)}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-center">
                         <button 
                           onClick={() => generarReciboPDF(liq)}
@@ -1317,10 +1352,12 @@ function NominaView() {
               <tfoot className="bg-neutral-700 font-bold">
                 <tr>
                   <td className="px-4 py-3 text-white">TOTALES</td>
-                  <td className="px-4 py-3 text-right text-green-400">${totalAsignaciones.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right text-red-400">${totalDeducciones.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right text-white">${totalNeto.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right text-yellow-400">Bs. {totalBs.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-green-400">{mostrarEnBs ? `Bs. ${(totalAsignaciones * tasaCambio).toFixed(2)}` : `${totalAsignaciones.toFixed(2)}`}</td>
+                  <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${(totalDeducciones * tasaCambio).toFixed(2)}` : `${totalDeducciones.toFixed(2)}`}</td>
+                  <td className="px-4 py-3 text-right text-white font-bold">{mostrarEnBs ? `Bs. ${totalBs.toFixed(2)}` : `${totalNeto.toFixed(2)}`}</td>
+                  {mostrarEnBs && (
+                    <td className="px-4 py-3 text-right text-neutral-400">${totalNeto.toFixed(2)}</td>
+                  )}
                   <td></td>
                 </tr>
               </tfoot>
@@ -1851,7 +1888,7 @@ function ContabilidadView() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [procesando, setProcesando] = useState(false);
-  const [mostrarEnBs, setMostrarEnBs] = useState(false);
+  const [mostrarEnBs, setMostrarEnBs] = useState(true);
 
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO' && e.empresa_id !== 1);
   
@@ -2022,24 +2059,30 @@ function ContabilidadView() {
           <div className="space-y-3">
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">Garantía PS (Art. 142a)</span>
-              <span className="text-white font-medium">${provisiones.garantia.toFixed(2)}</span>
+              <span className="text-white font-medium">{mostrarEnBs ? `Bs. ${(provisiones.garantia * tasaCambio).toFixed(2)}` : `${provisiones.garantia.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">Intereses sobre PS</span>
-              <span className="text-white font-medium">${provisiones.intereses.toFixed(2)}</span>
+              <span className="text-white font-medium">{mostrarEnBs ? `Bs. ${(provisiones.intereses * tasaCambio).toFixed(2)}` : `${provisiones.intereses.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">Alícuota Utilidades</span>
-              <span className="text-white font-medium">${provisiones.utilidades.toFixed(2)}</span>
+              <span className="text-white font-medium">{mostrarEnBs ? `Bs. ${(provisiones.utilidades * tasaCambio).toFixed(2)}` : `${provisiones.utilidades.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">Alícuota Bono Vacacional</span>
-              <span className="text-white font-medium">${provisiones.bonoVacacional.toFixed(2)}</span>
+              <span className="text-white font-medium">{mostrarEnBs ? `Bs. ${(provisiones.bonoVacacional * tasaCambio).toFixed(2)}` : `${provisiones.bonoVacacional.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-purple-600/20 rounded-lg border border-purple-600">
               <span className="text-white font-bold">TOTAL PROVISIONES</span>
-              <span className="text-purple-400 font-bold">${totalProvisiones.toFixed(2)}</span>
+              <span className="text-purple-400 font-bold">{mostrarEnBs ? `Bs. ${totalProvisionesBs.toFixed(2)}` : `${totalProvisiones.toFixed(2)}`}</span>
             </div>
+            {mostrarEnBs && (
+              <div className="flex justify-between p-2 bg-neutral-700/50 rounded-lg text-xs">
+                <span className="text-neutral-400">Equivalente en USD:</span>
+                <span className="text-neutral-300">${totalProvisiones.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2071,6 +2114,12 @@ function ContabilidadView() {
               <span className="text-neutral-300">INCES Patronal</span>
               <span className="text-red-400 font-medium">{mostrarEnBs ? `Bs. ${(totalIncesPatronal * tasaCambio).toFixed(2)}` : `${totalIncesPatronal.toFixed(2)}`}</span>
             </div>
+            {mostrarEnBs && (
+              <div className="flex justify-between p-2 bg-neutral-700/50 rounded-lg text-xs">
+                <span className="text-neutral-400">Total USD:</span>
+                <span className="text-neutral-300">${totalNeto.toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
