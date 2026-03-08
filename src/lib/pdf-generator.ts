@@ -140,7 +140,7 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.text('CONCEPTOS', 18, yPos + 5.5);
   doc.text('CANT./DÍAS', 100, yPos + 5.5);
-  doc.text('MONTO (USD)', 155, yPos + 5.5);
+  doc.text('MONTO (BS)', 155, yPos + 5.5);
   
   yPos += 12;
   
@@ -152,10 +152,11 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   
   doc.setFont('helvetica', 'normal');
   data.asignaciones.forEach(item => {
+    const montoBs = item.monto * data.totales.tasa_cambio;
     doc.text(item.descripcion, 18, yPos);
     doc.text('15', 105, yPos);
     doc.setTextColor(...colorVerde);
-    doc.text(`$${item.monto.toFixed(2)}`, 155, yPos, { align: 'right' });
+    doc.text(`Bs. ${montoBs.toFixed(2)}`, 155, yPos, { align: 'right' });
     doc.setTextColor(...colorSecundario);
     yPos += 6;
   });
@@ -173,8 +174,9 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   
   doc.setFont('helvetica', 'normal');
   data.deducciones.forEach(item => {
+    const montoBs = item.monto * data.totales.tasa_cambio;
     doc.text(item.descripcion, 18, yPos);
-    doc.text(`$${item.monto.toFixed(2)}`, 155, yPos, { align: 'right' });
+    doc.text(`Bs. ${montoBs.toFixed(2)}`, 155, yPos, { align: 'right' });
     yPos += 6;
   });
   
@@ -187,11 +189,14 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   doc.setFontSize(10);
   
   // Total Asignaciones
+  const totalAsignacionesBs = data.totales.total_asignaciones * data.totales.tasa_cambio;
+  const totalDeduccionesBs = data.totales.total_deducciones * data.totales.tasa_cambio;
+  
   doc.setFont('helvetica', 'normal');
   doc.text('TOTAL ASIGNACIONES:', 105, yPos + 8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...colorVerde);
-  doc.text(`$${data.totales.total_asignaciones.toFixed(2)}`, 200, yPos + 8, { align: 'right' });
+  doc.text(`Bs. ${totalAsignacionesBs.toFixed(2)}`, 200, yPos + 8, { align: 'right' });
   
   // Total Deducciones
   yPos += 12;
@@ -200,7 +205,7 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   doc.text('TOTAL DEDUCCIONES:', 105, yPos + 8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...colorRojo);
-  doc.text(`$${data.totales.total_deducciones.toFixed(2)}`, 200, yPos + 8, { align: 'right' });
+  doc.text(`Bs. ${totalDeduccionesBs.toFixed(2)}`, 200, yPos + 8, { align: 'right' });
   
   // NETO A PAGAR
   yPos += 14;
@@ -211,14 +216,14 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('NETO A PAGAR:', 105, yPos + 8);
-  doc.text(`$${data.totales.neto_pagar.toFixed(2)} USD`, 200, yPos + 8, { align: 'right' });
+  doc.text(`Bs. ${data.totales.neto_bs.toFixed(2)}`, 200, yPos + 8, { align: 'right' });
   
-  // Equivalente en Bs
+  // Equivalente en USD (informativo)
   yPos += 20;
   doc.setTextColor(...colorSecundario);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text(`EQUIVALENTE: Bs. ${data.totales.neto_bs.toFixed(2)}`, 105, yPos, { align: 'center' });
+  doc.text(`EQUIVALENTE INFORMATIVO EN USD: ${data.totales.neto_pagar.toFixed(2)}`, 105, yPos, { align: 'center' });
   
   // Tasa de cambio
   yPos += 6;
@@ -271,10 +276,10 @@ export function generarLibroDiario(
     l.empleado.cedula,
     `${l.empleado.apellido || ''} ${l.empleado.nombre}`.trim(),
     l.periodo.dias_trabajados.toString(),
-    `$${l.totales.total_asignaciones.toFixed(2)}`,
-    `$${l.totales.total_deducciones.toFixed(2)}`,
-    `$${l.totales.neto_pagar.toFixed(2)}`,
-    `Bs. ${l.totales.neto_bs.toFixed(2)}`
+    `Bs. ${(l.totales.total_asignaciones * l.totales.tasa_cambio).toFixed(2)}`,
+    `Bs. ${(l.totales.total_deducciones * l.totales.tasa_cambio).toFixed(2)}`,
+    `Bs. ${l.totales.neto_bs.toFixed(2)}`,
+    `${l.totales.neto_pagar.toFixed(2)}`
   ]);
   
   // Totales

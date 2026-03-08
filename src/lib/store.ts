@@ -3,6 +3,15 @@
 // ============================================================
 
 import { create } from 'zustand';
+import { 
+  guardarTasaActiva as guardarTasaActivaBCV, 
+  getTasaActivaPorMes,
+  getHistorialTasasActivas,
+  getUltimaTasaCambio,
+  getHistorialTasasCambio,
+  HistoricoTasaActiva,
+  HistoricoTasaCambio
+} from './bcv-service';
 
 // Tipos
 export interface Empresa {
@@ -108,6 +117,8 @@ interface AppState {
   // Tasa BCV
   tasaCambio: number;
   tasaActiva: number;  // Tasa activa para prestaciones sociales
+  historialTasasActivas: HistoricoTasaActiva[];  // Historial de tasas activas
+  historialTasasCambio: HistoricoTasaCambio[];  // Historial de tasas de cambio
   
   // Acciones
   setUsuario: (usuario: Usuario | null) => void;
@@ -121,6 +132,9 @@ interface AppState {
   setSuccessMessage: (message: string | null) => void;
   setTasaCambio: (tasa: number) => void;
   setTasaActiva: (tasa: number) => void;
+  guardarTasaActiva: (ano: number, mes: number, tasa: number, descripcion?: string) => void;
+  obtenerTasaActivaParaCalculo: (ano: number, mes: number) => number;
+  cargarHistorialTasas: () => void;
   updateParametros: (updates: Partial<Parametros>) => void;
   
   // Gestión de empleados
@@ -165,6 +179,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   successMessage: null,
   tasaCambio: 36.15,
   tasaActiva: 60.00,
+  historialTasasActivas: [],
+  historialTasasCambio: [],
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -178,6 +194,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSuccessMessage: (successMessage) => set({ successMessage }),
   setTasaCambio: (tasaCambio) => set({ tasaCambio }),
   setTasaActiva: (tasaActiva) => set({ tasaActiva }),
+  
+  // Guardar tasa activa en historial
+  guardarTasaActiva: (ano, mes, tasa, descripcion = 'Tasa Activa BCV') => {
+    guardarTasaActivaBCV(ano, mes, tasa, descripcion);
+    const historial = getHistorialTasasActivas();
+    set({ 
+      tasaActiva: tasa,
+      historialTasasActivas: historial 
+    });
+    // Actualizar parámetros
+    const { parametros } = get();
+    set({ 
+      parametros: { ...parametros, tasa_activa: tasa } 
+    });
+  },
+  
+  // Obtener tasa activa para cálculo de prestaciones (busca en historial)
+  obtenerTasaActivaParaCalculo: (ano: number, mes: number) => {
+    return getTasaActivaPorMes(ano, mes);
+  },
+  
+  // Cargar historial de tasas
+  cargarHistorialTasas: () => {
+    const tasasActivas = getHistorialTasasActivas();
+    const tasasCambio = getHistorialTasasCambio();
+    const tasaActual = getUltimaTasaCambio();
+    
+    set({ 
+      historialTasasActivas: tasasActivas,
+      historialTasasCambio: tasasCambio,
+      tasaCambio: tasaActual
+    });
+  },
   updateParametros: (updates) => set((state) => ({ 
     parametros: { ...state.parametros, ...updates } 
   })),
@@ -215,6 +264,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           isAuthenticated: true,
           loading: false
         });
+        
+        // Cargar historial de tasas BCV al iniciar
+        get().cargarHistorialTasas();
         
         return true;
       }

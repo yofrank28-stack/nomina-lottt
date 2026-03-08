@@ -222,6 +222,41 @@ CREATE TABLE IF NOT EXISTS detalle_asientos (
 );
 
 -- ============================================================
+-- TABLA: HISTORICO TASAS DE CAMBIO BCV
+-- Almacena el historial de tasas de cambio USD/VES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS historico_tasas_cambio (
+    id SERIAL PRIMARY KEY,
+    fecha DATE NOT NULL UNIQUE,
+    precio_venta DECIMAL(15,4) NOT NULL,
+    moneda VARCHAR(10) DEFAULT 'USD',
+    fuente VARCHAR(50) DEFAULT 'BCV',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_historico_tasas_fecha ON historico_tasas_cambio(fecha);
+
+-- ============================================================
+-- TABLA: HISTORICO TASAS ACTIVAS BCV
+-- Almacena el historial de tasas activas para prestaciones
+-- sociales (intereses sobre depósitos de garantía)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS historico_tasas_activas (
+    id SERIAL PRIMARY KEY,
+    ano INT NOT NULL,
+    mes INT NOT NULL,
+    tasa DECIMAL(10,4) NOT NULL,
+    descripcion VARCHAR(200),
+    fuente VARCHAR(50) DEFAULT 'BCV',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ano, mes)
+);
+
+CREATE INDEX idx_historico_tasas_activas_ano_mes ON historico_tasas_activas(ano, mes);
+
+-- ============================================================
 -- TABLA: PROVISIONES LABORALES
 -- Provisiones de Pasivos Laborales (Art. 142a LOTTT)
 -- ============================================================

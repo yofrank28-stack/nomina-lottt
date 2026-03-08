@@ -291,8 +291,15 @@ function Dashboard() {
 // ============================================================
 function DashboardView() {
   const { empresas, empleados, tasaCambio } = useAppStore();
+  const [mostrarEnBs, setMostrarEnBs] = useState(false);
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
-  const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base * tasaCambio : e.sueldo_base; return sum + monto; }, 0);
+  
+  // Calcular nómina mensual en USD y BS
+  const nominaEnUsd = empleadosActivos.reduce((sum, e) => { 
+    const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base : e.sueldo_base / tasaCambio; 
+    return sum + monto; 
+  }, 0);
+  const nominaEnBs = nominaEnUsd * tasaCambio;
 
   const stats = [
     {
@@ -308,14 +315,14 @@ function DashboardView() {
       color: "bg-green-600"
     },
     {
-      label: "Nómina Mensual (USD)",
-      value: `$${nominaTotal.toFixed(2)}`,
+      label: mostrarEnBs ? "Nómina Mensual (Bs)" : "Nómina Mensual (USD)",
+      value: mostrarEnBs ? `Bs. ${nominaEnBs.toFixed(2)}` : `${nominaEnUsd.toFixed(2)}`,
       icon: DollarSign,
       color: "bg-yellow-600"
     },
     {
-      label: "Nómina Mensual (Bs)",
-      value: `Bs. ${nominaTotal.toFixed(2)}`,
+      label: "Tasa BCV",
+      value: `Bs. ${tasaCambio.toFixed(2)}`,
       icon: Calculator,
       color: "bg-purple-600"
     }
@@ -323,9 +330,35 @@ function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-        <p className="text-neutral-400">Resumen del sistema de nómina</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Dashboard</h2>
+          <p className="text-neutral-400">Resumen del sistema de nómina</p>
+        </div>
+        
+        {/* Selector de Moneda */}
+        <div className="flex items-center gap-2 bg-neutral-800 rounded-lg p-1 border border-neutral-700">
+          <button
+            onClick={() => setMostrarEnBs(false)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              !mostrarEnBs 
+                ? 'bg-blue-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            USD
+          </button>
+          <button
+            onClick={() => setMostrarEnBs(true)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mostrarEnBs 
+                ? 'bg-green-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            BS
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -1491,10 +1524,30 @@ function ReportesView() {
 // VISTA: PARÁMETROS
 // ============================================================
 function ParametrosView() {
-  const { parametros, setParametros, tasaCambio, setTasaCambio, setSuccessMessage, updateParametros } = useAppStore();
+  const { 
+    parametros, 
+    setParametros, 
+    tasaCambio, 
+    setTasaCambio, 
+    setSuccessMessage, 
+    updateParametros,
+    tasaActiva,
+    guardarTasaActiva,
+    historialTasasActivas,
+    cargarHistorialTasas
+  } = useAppStore();
   const [loadingTasa, setLoadingTasa] = useState(false);
   const [editando, setEditando] = useState(false);
   const [formParams, setFormParams] = useState(parametros);
+  const [editandoTasaActiva, setEditandoTasaActiva] = useState(false);
+  const [tasaActivaEdit, setTasaActivaEdit] = useState(tasaActiva);
+  const [anoTasaActiva, setAnoTasaActiva] = useState(new Date().getFullYear());
+  const [mesTasaActiva, setMesTasaActiva] = useState(new Date().getMonth() + 1);
+
+  // Cargar historial al montar
+  useEffect(() => {
+    cargarHistorialTasas();
+  }, []);
 
   const handleActualizarTasa = async () => {
     setLoadingTasa(true);
@@ -1513,6 +1566,12 @@ function ParametrosView() {
     updateParametros(formParams);
     setSuccessMessage("Parámetros guardados correctamente");
     setEditando(false);
+  };
+
+  const handleGuardarTasaActiva = () => {
+    guardarTasaActiva(anoTasaActiva, mesTasaActiva, tasaActivaEdit, `Tasa Activa ${mesTasaActiva}/${anoTasaActiva}`);
+    setSuccessMessage(`Tasa activa ${tasaActivaEdit.toFixed(2)}% guardada para ${mesTasaActiva}/${anoTasaActiva}`);
+    setEditandoTasaActiva(false);
   };
 
   return (
@@ -1546,6 +1605,97 @@ function ParametrosView() {
               <p className="text-xs text-neutral-500">
                 Última actualización: {new Date(parametros.fecha_actualizacion_tasa).toLocaleString("es-VE")}
               </p>
+            )}
+          </div>
+        </div>
+
+        {/* Tasa Activa para Prestaciones */}
+        <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Tasa Activa (Prestaciones)</h3>
+            <button
+              onClick={() => setEditandoTasaActiva(!editandoTasaActiva)}
+              className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded"
+              title={editandoTasaActiva ? "Cancelar" : "Editar"}
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-neutral-700 rounded-lg">
+              <div>
+                <p className="text-sm text-neutral-400">Tasa Activa BCV</p>
+                <p className="text-2xl font-bold text-yellow-400">{tasaActiva.toFixed(2)}%</p>
+                <p className="text-xs text-neutral-500 mt-1">Para cálculo de intereses sobre prestaciones</p>
+              </div>
+            </div>
+            
+            {editandoTasaActiva && (
+              <div className="space-y-3 p-3 bg-neutral-600 rounded-lg">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-neutral-400">Año</label>
+                    <input
+                      type="number"
+                      value={anoTasaActiva}
+                      onChange={(e) => setAnoTasaActiva(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-neutral-400">Mes</label>
+                    <select
+                      value={mesTasaActiva}
+                      onChange={(e) => setMesTasaActiva(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
+                    >
+                      {[...Array(12)].map((_, i) => (
+                        <option key={i + 1} value={i + 1}>{i + 1}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-400">Tasa (%)</label>
+                  <input
+                    type="number"
+                    value={tasaActivaEdit}
+                    onChange={(e) => setTasaActivaEdit(parseFloat(e.target.value))}
+                    className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
+                    step="0.01"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleGuardarTasaActiva}
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                  >
+                    Guardar Tasa
+                  </button>
+                  <button
+                    onClick={() => { setEditandoTasaActiva(false); setTasaActivaEdit(tasaActiva); }}
+                    className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Historial de Tasas Activas */}
+            {historialTasasActivas.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs text-neutral-400 mb-2">Historial de Tasas</p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {historialTasasActivas.slice(0, 6).map((t, idx) => (
+                    <div key={idx} className="flex justify-between text-xs p-2 bg-neutral-700/50 rounded">
+                      <span className="text-neutral-400">{t.mes.toString().padStart(2, '0')}/{t.ano}</span>
+                      <span className="text-yellow-400">{t.tasa.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -1697,10 +1847,11 @@ function ParametrosView() {
 // VISTA: CONTABILIDAD
 // ============================================================
 function ContabilidadView() {
-  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, setError } = useAppStore();
+  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, setError, tasaActiva, obtenerTasaActivaParaCalculo } = useAppStore();
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [procesando, setProcesando] = useState(false);
+  const [mostrarEnBs, setMostrarEnBs] = useState(false);
 
   const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO' && e.empresa_id !== 1);
   
@@ -1709,12 +1860,15 @@ function ContabilidadView() {
     const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base : e.sueldo_base / tasaCambio; return sum + monto; }, 0);
     const diarioSueldo = nominaTotal / 30;
     
+    // Obtener tasa activa del mes (busca en historial o usa la actual)
+    const tasaDelMes = obtenerTasaActivaParaCalculo(ano, mes);
+    const tasaActivaDecimal = tasaDelMes / 100;
+    
     // Garantía de Prestaciones (Art. 142a): 15 días por trimestre
     const garantia = (diarioSueldo * 15) / 3; // Trimestral
     
-    // Intereses sobre Prestaciones (tasa activa BCV aproximadamente 60%)
-    const tasaActiva = 0.60; // 60% anual
-    const intereses = garantia * tasaActiva / 4; // Trimestral
+    // Intereses sobre Prestaciones (tasa activa BCV)
+    const intereses = garantia * tasaActivaDecimal / 4; // Trimestral
     
     // Alícuota de Utilidades (30 días)
     const utilidades = diarioSueldo * 30 / 12; // Mensual
@@ -1726,7 +1880,8 @@ function ContabilidadView() {
       garantia: Math.round(garantia * 100) / 100,
       intereses: Math.round(intereses * 100) / 100,
       utilidades: Math.round(utilidades * 100) / 100,
-      bonoVacacional: Math.round(bonoVacacional * 100) / 100
+      bonoVacacional: Math.round(bonoVacacional * 100) / 100,
+      tasaActiva: tasaDelMes
     };
   };
 
@@ -1739,6 +1894,15 @@ function ContabilidadView() {
   const totalFaov = liquidaciones.reduce((sum, l) => sum + l.faov_trabajador, 0);
   const totalRpe = liquidaciones.reduce((sum, l) => sum + l.rpe_trabajador, 0);
   const totalIncesPatronal = liquidaciones.reduce((sum, l) => sum + (l.inces_patronal || 0), 0);
+  
+  // Totales en BS cuando switch está activo
+  const totalNetoBs = totalNeto * tasaCambio;
+  const totalIvssBs = totalIvss * tasaCambio;
+  const totalFaovBs = totalFaov * tasaCambio;
+  const totalRpeBs = totalRpe * tasaCambio;
+  const totalProvisionesBs = totalProvisiones * tasaCambio;
+  const totalAsignacionesBs = liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0) * tasaCambio;
+  const totalEgresosBs = (totalNeto + totalIvss + totalFaov + totalRpe) * tasaCambio;
 
   const generarAsientoDiario = () => {
     if (liquidaciones.length === 0) {
@@ -1786,9 +1950,35 @@ function ContabilidadView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-white">Contabilidad y Provisiones</h2>
-        <p className="text-neutral-400">Asientos contables y provisiones laborales LOTTT</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Contabilidad y Provisiones</h2>
+          <p className="text-neutral-400">Asientos contables y provisiones laborales LOTTT</p>
+        </div>
+        
+        {/* Selector de Moneda */}
+        <div className="flex items-center gap-2 bg-neutral-800 rounded-lg p-1 border border-neutral-700">
+          <button
+            onClick={() => setMostrarEnBs(false)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              !mostrarEnBs 
+                ? 'bg-blue-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            USD
+          </button>
+          <button
+            onClick={() => setMostrarEnBs(true)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mostrarEnBs 
+                ? 'bg-green-600 text-white' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            BS
+          </button>
+        </div>
       </div>
 
       {/* Período */}
@@ -1863,23 +2053,23 @@ function ContabilidadView() {
           <div className="space-y-3">
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">Neto a Pagar</span>
-              <span className="text-green-400 font-medium">${totalNeto.toFixed(2)}</span>
+              <span className="text-green-400 font-medium">{mostrarEnBs ? `Bs. ${totalNetoBs.toFixed(2)}` : `${totalNeto.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">IVSS</span>
-              <span className="text-red-400 font-medium">${totalIvss.toFixed(2)}</span>
+              <span className="text-red-400 font-medium">{mostrarEnBs ? `Bs. ${totalIvssBs.toFixed(2)}` : `${totalIvss.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">FAOV</span>
-              <span className="text-red-400 font-medium">${totalFaov.toFixed(2)}</span>
+              <span className="text-red-400 font-medium">{mostrarEnBs ? `Bs. ${totalFaovBs.toFixed(2)}` : `${totalFaov.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">RPE</span>
-              <span className="text-red-400 font-medium">${totalRpe.toFixed(2)}</span>
+              <span className="text-red-400 font-medium">{mostrarEnBs ? `Bs. ${totalRpeBs.toFixed(2)}` : `${totalRpe.toFixed(2)}`}</span>
             </div>
             <div className="flex justify-between p-3 bg-neutral-700 rounded-lg">
               <span className="text-neutral-300">INCES Patronal</span>
-              <span className="text-red-400 font-medium">${totalIncesPatronal.toFixed(2)}</span>
+              <span className="text-red-400 font-medium">{mostrarEnBs ? `Bs. ${(totalIncesPatronal * tasaCambio).toFixed(2)}` : `${totalIncesPatronal.toFixed(2)}`}</span>
             </div>
           </div>
         </div>
@@ -1912,47 +2102,47 @@ function ContabilidadView() {
           <thead className="bg-neutral-700">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Cuenta</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Debe (USD)</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">Haber (USD)</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Debe (BS)' : 'Debe (USD)'}</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Haber (BS)' : 'Haber (USD)'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-700">
             <tr>
               <td className="px-4 py-3 text-white font-medium">Gasto de Sueldos</td>
-              <td className="px-4 py-3 text-right text-green-400">${liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0).toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-green-400">{mostrarEnBs ? `Bs. ${totalAsignacionesBs.toFixed(2)}` : `${liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0).toFixed(2)}`}</td>
               <td className="px-4 py-3 text-right">-</td>
             </tr>
             <tr>
               <td className="px-4 py-3 text-white font-medium">Bancos</td>
               <td className="px-4 py-3 text-right">-</td>
-              <td className="px-4 py-3 text-right text-red-400">${totalNeto.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${totalNetoBs.toFixed(2)}` : `${totalNeto.toFixed(2)}`}</td>
             </tr>
             <tr>
               <td className="px-4 py-3 text-white font-medium">IVSS por Pagar</td>
               <td className="px-4 py-3 text-right">-</td>
-              <td className="px-4 py-3 text-right text-red-400">${totalIvss.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${totalIvssBs.toFixed(2)}` : `${totalIvss.toFixed(2)}`}</td>
             </tr>
             <tr>
               <td className="px-4 py-3 text-white font-medium">FAOV por Pagar</td>
               <td className="px-4 py-3 text-right">-</td>
-              <td className="px-4 py-3 text-right text-red-400">${totalFaov.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${totalFaovBs.toFixed(2)}` : `${totalFaov.toFixed(2)}`}</td>
             </tr>
             <tr>
               <td className="px-4 py-3 text-white font-medium">RPE por Pagar</td>
               <td className="px-4 py-3 text-right">-</td>
-              <td className="px-4 py-3 text-right text-red-400">${totalRpe.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${totalRpeBs.toFixed(2)}` : `${totalRpe.toFixed(2)}`}</td>
             </tr>
             <tr>
               <td className="px-4 py-3 text-white font-medium">Provisiones Laborales</td>
-              <td className="px-4 py-3 text-right text-green-400">${totalProvisiones.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-green-400">{mostrarEnBs ? `Bs. ${totalProvisionesBs.toFixed(2)}` : `${totalProvisiones.toFixed(2)}`}</td>
               <td className="px-4 py-3 text-right">-</td>
             </tr>
           </tbody>
           <tfoot className="bg-neutral-700 font-bold">
             <tr>
               <td className="px-4 py-3 text-white">TOTALES</td>
-              <td className="px-4 py-3 text-right text-green-400">${(liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0) + totalProvisiones).toFixed(2)}</td>
-              <td className="px-4 py-3 text-right text-red-400">${(totalNeto + totalIvss + totalFaov + totalRpe).toFixed(2)}</td>
+              <td className="px-4 py-3 text-right text-green-400">{mostrarEnBs ? `Bs. ${(totalAsignacionesBs + totalProvisionesBs).toFixed(2)}` : `${(liquidaciones.reduce((s, l) => s + l.total_asignaciones, 0) + totalProvisiones).toFixed(2)}`}</td>
+              <td className="px-4 py-3 text-right text-red-400">{mostrarEnBs ? `Bs. ${totalEgresosBs.toFixed(2)}` : `${(totalNeto + totalIvss + totalFaov + totalRpe).toFixed(2)}`}</td>
             </tr>
           </tfoot>
         </table>
