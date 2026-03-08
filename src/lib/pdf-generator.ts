@@ -223,14 +223,14 @@ export function generarReciboLiquidacion(data: ReciboLiquidacionData): jsPDF {
   doc.setTextColor(...colorSecundario);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text(`EQUIVALENTE INFORMATIVO EN USD: ${data.totales.neto_pagar.toFixed(2)}`, 105, yPos, { align: 'center' });
+  doc.text(`Monto referencial en USD: ${data.totales.neto_pagar.toFixed(2)}`, 105, yPos, { align: 'center' });
   
   // Tasa de cambio
   yPos += 6;
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(128, 128, 128);
-  doc.text(`(Tasa BCV: Bs. ${data.totales.tasa_cambio.toFixed(2)} por USD)`, 105, yPos, { align: 'center' });
+  doc.text(`(Tasa BCV: Bs. ${data.totales.tasa_cambio.toFixed(2)})`, 105, yPos, { align: 'center' });
   
   // === PIE DE PÁGINA ===
   doc.setFontSize(7);

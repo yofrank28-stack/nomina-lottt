@@ -10,7 +10,9 @@ import {
   getUltimaTasaCambio,
   getHistorialTasasCambio,
   HistoricoTasaActiva,
-  HistoricoTasaCambio
+  HistoricoTasaCambio,
+  guardarTasaActivaConRecalculo,
+  getAuditoriaCambiosTasas
 } from './bcv-service';
 
 // Tipos
@@ -119,6 +121,7 @@ interface AppState {
   tasaActiva: number;  // Tasa activa para prestaciones sociales
   historialTasasActivas: HistoricoTasaActiva[];  // Historial de tasas activas
   historialTasasCambio: HistoricoTasaCambio[];  // Historial de tasas de cambio
+  auditoriaCambiosTasas: any[];  // Auditoría de cambios de tasas
   
   // Acciones
   setUsuario: (usuario: Usuario | null) => void;
@@ -135,6 +138,7 @@ interface AppState {
   guardarTasaActiva: (ano: number, mes: number, tasa: number, descripcion?: string) => void;
   obtenerTasaActivaParaCalculo: (ano: number, mes: number) => number;
   cargarHistorialTasas: () => void;
+  getAuditoriaTasas: () => any[];
   updateParametros: (updates: Partial<Parametros>) => void;
   
   // Gestión de empleados
@@ -181,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tasaActiva: 60.00,
   historialTasasActivas: [],
   historialTasasCambio: [],
+  auditoriaCambiosTasas: [],
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -199,9 +204,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   guardarTasaActiva: (ano, mes, tasa, descripcion = 'Tasa Activa BCV') => {
     guardarTasaActivaBCV(ano, mes, tasa, descripcion);
     const historial = getHistorialTasasActivas();
+    const auditoria = getAuditoriaCambiosTasas();
     set({ 
       tasaActiva: tasa,
-      historialTasasActivas: historial 
+      historialTasasActivas: historial,
+      auditoriaCambiosTasas: auditoria
     });
     // Actualizar parámetros
     const { parametros } = get();
@@ -220,12 +227,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const tasasActivas = getHistorialTasasActivas();
     const tasasCambio = getHistorialTasasCambio();
     const tasaActual = getUltimaTasaCambio();
+    const auditoria = getAuditoriaCambiosTasas();
     
     set({ 
       historialTasasActivas: tasasActivas,
       historialTasasCambio: tasasCambio,
-      tasaCambio: tasaActual
+      tasaCambio: tasaActual,
+      auditoriaCambiosTasas: auditoria
     });
+  },
+  getAuditoriaTasas: () => {
+    return getAuditoriaCambiosTasas();
   },
   updateParametros: (updates) => set((state) => ({ 
     parametros: { ...state.parametros, ...updates } 

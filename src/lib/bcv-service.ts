@@ -37,11 +37,27 @@ export interface HistoricoTasaActiva {
   tasa: number;
   descripcion: string;
   fuente: string;
+  fecha_creacion?: string;
+  modificado_por?: string;
+  fecha_modificacion?: string;
+}
+
+// Registro de auditoría de cambios de tasas
+export interface AuditoriaCambioTasa {
+  id?: number;
+  ano: number;
+  mes: number;
+  tasa_anterior: number;
+  tasa_nueva: number;
+  usuario: string;
+  fecha_cambio: string;
+  motivo?: string;
 }
 
 // Almacenamiento en memoria (en producción sería base de datos)
 let historialTasasCambio: HistoricoTasaCambio[] = [];
 let historialTasasActivas: HistoricoTasaActiva[] = [];
+let auditoriaCambiosTasas: AuditoriaCambioTasa[] = [];
 
 // URLs del BCV para obtener tasas de cambio
 const BCV_API_URL = 'https://www.bcv.org.ve/servicios/recurso';
@@ -101,25 +117,85 @@ export function guardarTasaActiva(
   ano: number, 
   mes: number, 
   tasa: number, 
-  descripcion: string = 'Tasa Activa BCV'
+  descripcion: string = 'Tasa Activa BCV',
+  usuario: string = 'Sistema',
+  motivo?: string
 ): void {
   const existente = historialTasasActivas.findIndex(
     t => t.ano === ano && t.mes === mes
   );
+  
+  const tasaAnterior = existente >= 0 ? historialTasasActivas[existente].tasa : 0;
   
   const nuevaTasa: HistoricoTasaActiva = {
     ano,
     mes,
     tasa,
     descripcion,
-    fuente: 'Manual'
+    fuente: 'Manual',
+    fecha_creacion: existente >= 0 ? historialTasasActivas[existente].fecha_creacion : new Date().toISOString(),
+    modificado_por: usuario,
+    fecha_modificacion: new Date().toISOString()
   };
   
   if (existente >= 0) {
+    // Registrar en auditoría si hay cambio
+    if (tasaAnterior !== tasa) {
+      auditoriaCambiosTasas.push({
+        ano,
+        mes,
+        tasa_anterior: tasaAnterior,
+        tasa_nueva: tasa,
+        usuario,
+        fecha_cambio: new Date().toISOString(),
+        motivo
+      });
+    }
     historialTasasActivas[existente] = nuevaTasa;
   } else {
+    nuevaTasa.fecha_creacion = new Date().toISOString();
     historialTasasActivas.push(nuevaTasa);
   }
+}
+
+// Obtener historial de auditoría de cambios
+export function getAuditoriaCambiosTasas(): AuditoriaCambioTasa[] {
+  return [...auditoriaCambiosTasas].sort((a, b) => 
+    b.fecha_cambio.localeCompare(a.fecha_cambio)
+  );
+}
+
+// Guardar tasa activa con verificación de recálculo
+export interface ResultadoRecalculo {
+  necesitaRecalculo: boolean;
+  empleadosAfectados: number;
+  mensaje: string;
+}
+
+export function guardarTasaActivaConRecalculo(
+  ano: number, 
+  mes: number, 
+  tasa: number,
+  descripcion: string = 'Tasa Activa BCV',
+  usuario: string = 'Sistema',
+  motivo?: string
+): ResultadoRecalculo {
+  const existente = historialTasasActivas.findIndex(
+    t => t.ano === ano && t.mes === mes
+  );
+  
+  const tasaAnterior = existente >= 0 ? historialTasasActivas[existente].tasa : 0;
+  const necesitaRecalculo = existente >= 0 && tasaAnterior !== tasa;
+  
+  guardarTasaActiva(ano, mes, tasa, descripcion, usuario, motivo);
+  
+  return {
+    necesitaRecalculo,
+    empleadosAfectados: 0, // Se llenará desde el store
+    mensaje: necesitaRecalculo 
+      ? `Se modificó la tasa del ${mes}/${ano}. Deberá recalcular las prestaciones.`
+      : 'Tasa guardada correctamente'
+  };
 }
 
 // Obtener tasa activa para un mes específico (para cálculos de prestaciones)

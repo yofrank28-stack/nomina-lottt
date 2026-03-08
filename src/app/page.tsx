@@ -139,6 +139,7 @@ function Dashboard() {
   } = useAppStore();
 
   const [loadingTasa, setLoadingTasa] = useState(false);
+  const [mostrarEnBsGlobal, setMostrarEnBsGlobal] = useState(true);
 
   // Cargar tasa BCV al inicio
   useEffect(() => {
@@ -189,6 +190,30 @@ function Dashboard() {
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Selector de Moneda Global */}
+              <div className="flex items-center gap-1 bg-neutral-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => setMostrarEnBsGlobal(false)}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    !mostrarEnBsGlobal 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  USD
+                </button>
+                <button
+                  onClick={() => setMostrarEnBsGlobal(true)}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    mostrarEnBsGlobal 
+                      ? 'bg-green-600 text-white' 
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  BS
+                </button>
+              </div>
+
               {/* Tasa BCV */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-700 rounded-lg">
                 <DollarSign className="w-4 h-4 text-green-400" />
@@ -926,7 +951,7 @@ function EmpleadosView() {
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Nombre</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Empresa</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Cargo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Sueldo USD</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Sueldo Bs.</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Estatus</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-neutral-300 uppercase">Acciones</th>
             </tr>
@@ -1571,7 +1596,9 @@ function ParametrosView() {
     tasaActiva,
     guardarTasaActiva,
     historialTasasActivas,
-    cargarHistorialTasas
+    cargarHistorialTasas,
+    getAuditoriaTasas,
+    usuario
   } = useAppStore();
   const [loadingTasa, setLoadingTasa] = useState(false);
   const [editando, setEditando] = useState(false);
@@ -1580,11 +1607,44 @@ function ParametrosView() {
   const [tasaActivaEdit, setTasaActivaEdit] = useState(tasaActiva);
   const [anoTasaActiva, setAnoTasaActiva] = useState(new Date().getFullYear());
   const [mesTasaActiva, setMesTasaActiva] = useState(new Date().getMonth() + 1);
+  const [mostrarAuditoria, setMostrarAuditoria] = useState(false);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+  const [tasaAnterior, setTasaAnterior] = useState(0);
+  const [mostrarHistorialCompleto, setMostrarHistorialCompleto] = useState(false);
+  const [tasasAnuales, setTasasAnuales] = useState<any[]>([]);
+  const [anoSeleccionado, setAnoSeleccionado] = useState(new Date().getFullYear());
 
   // Cargar historial al montar
   useEffect(() => {
     cargarHistorialTasas();
+    // Generar tasas para el año completo
+    generarTasasAnuales(anoSeleccionado);
   }, []);
+
+  // Generar array de tasas para un año completo
+  const generarTasasAnuales = (ano: number) => {
+    const tasas: any[] = [];
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    
+    for (let mes = 1; mes <= 12; mes++) {
+      const tasaExistente = historialTasasActivas.find(t => t.ano === ano && t.mes === mes);
+      tasas.push({
+        ano,
+        mes,
+        nombreMes: meses[mes - 1],
+        tasa: tasaExistente?.tasa || 60.00,
+        fuente: tasaExistente?.fuente || 'Automático',
+        modificado_por: tasaExistente?.modificado_por || '-',
+        fecha_modificacion: tasaExistente?.fecha_modificacion || '-'
+      });
+    }
+    setTasasAnuales(tasas);
+  };
+
+  // Actualizar tasas anuales cuando cambia el año o el historial
+  useEffect(() => {
+    generarTasasAnuales(anoSeleccionado);
+  }, [anoSeleccionado, historialTasasActivas]);
 
   const handleActualizarTasa = async () => {
     setLoadingTasa(true);
@@ -1606,10 +1666,32 @@ function ParametrosView() {
   };
 
   const handleGuardarTasaActiva = () => {
-    guardarTasaActiva(anoTasaActiva, mesTasaActiva, tasaActivaEdit, `Tasa Activa ${mesTasaActiva}/${anoTasaActiva}`);
-    setSuccessMessage(`Tasa activa ${tasaActivaEdit.toFixed(2)}% guardada para ${mesTasaActiva}/${anoTasaActiva}`);
-    setEditandoTasaActiva(false);
+    // Buscar si ya existe una tasa para ese mes/año
+    const tasaExistente = historialTasasActivas.find(t => t.ano === anoTasaActiva && t.mes === mesTasaActiva);
+    setTasaAnterior(tasaExistente?.tasa || 0);
+    setMostrarConfirmacion(true);
   };
+
+  const confirmarGuardadoTasa = (motivo?: string) => {
+    const usuario = useAppStore.getState().usuario;
+    guardarTasaActiva(anoTasaActiva, mesTasaActiva, tasaActivaEdit, `Tasa Activa ${mesTasaActiva}/${anoTasaActiva}`);
+    setSuccessMessage(`Tasa activa ${tasaActivaEdit.toFixed(2)}% guardada para ${mesTasaActiva}/${anoTasaActiva}${tasaAnterior !== 0 && tasaAnterior !== tasaActivaEdit ? ' - Se debe recalcular prestaciones' : ''}`);
+    setEditandoTasaActiva(false);
+    setMostrarConfirmacion(false);
+    generarTasasAnuales(anoSeleccionado);
+  };
+
+  const handleEditarTasaMensual = (mes: number, nuevaTasa: number) => {
+    const tasaExistente = historialTasasActivas.find(t => t.ano === anoSeleccionado && t.mes === mes);
+    setTasaAnterior(tasaExistente?.tasa || 0);
+    setAnoTasaActiva(anoSeleccionado);
+    setMesTasaActiva(mes);
+    setTasaActivaEdit(nuevaTasa);
+    setEditandoTasaActiva(true);
+    setMostrarConfirmacion(true);
+  };
+
+  const auditoria = getAuditoriaTasas();
 
   return (
     <div className="space-y-6">
@@ -1646,95 +1728,103 @@ function ParametrosView() {
           </div>
         </div>
 
-        {/* Tasa Activa para Prestaciones */}
-        <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+        {/* Tasa Activa para Prestaciones - Historia Anual */}
+        <div className="bg-neutral-800 rounded-xl p-6 border border-yellow-600/30 col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Tasa Activa (Prestaciones)</h3>
+            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-yellow-400" />
+              Configuración de Tasas Activas (LOTTT)
+            </h3>
             <button
-              onClick={() => setEditandoTasaActiva(!editandoTasaActiva)}
-              className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded"
-              title={editandoTasaActiva ? "Cancelar" : "Editar"}
+              onClick={() => setMostrarAuditoria(!mostrarAuditoria)}
+              className="px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded-lg text-sm"
             >
-              <Edit className="w-4 h-4" />
+              {mostrarAuditoria ? 'Ocultar Auditoría' : 'Ver Auditoría'}
             </button>
           </div>
           
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-neutral-700 rounded-lg">
-              <div>
-                <p className="text-sm text-neutral-400">Tasa Activa BCV</p>
-                <p className="text-2xl font-bold text-yellow-400">{tasaActiva.toFixed(2)}%</p>
-                <p className="text-xs text-neutral-500 mt-1">Para cálculo de intereses sobre prestaciones</p>
-              </div>
+          {/* Selector de Año */}
+          <div className="flex items-center gap-4 mb-4">
+            <div>
+              <label className="text-sm text-neutral-400">Año Fiscal:</label>
+              <select
+                value={anoSeleccionado}
+                onChange={(e) => setAnoSeleccionado(parseInt(e.target.value))}
+                className="ml-2 px-3 py-1.5 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+              >
+                {[2024, 2025, 2026].map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
             </div>
-            
-            {editandoTasaActiva && (
-              <div className="space-y-3 p-3 bg-neutral-600 rounded-lg">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-neutral-400">Año</label>
-                    <input
-                      type="number"
-                      value={anoTasaActiva}
-                      onChange={(e) => setAnoTasaActiva(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-neutral-400">Mes</label>
-                    <select
-                      value={mesTasaActiva}
-                      onChange={(e) => setMesTasaActiva(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
-                    >
-                      {[...Array(12)].map((_, i) => (
-                        <option key={i + 1} value={i + 1}>{i + 1}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-neutral-400">Tasa (%)</label>
-                  <input
-                    type="number"
-                    value={tasaActivaEdit}
-                    onChange={(e) => setTasaActivaEdit(parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-neutral-700 border border-neutral-500 rounded-lg text-white"
-                    step="0.01"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleGuardarTasaActiva}
-                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                  >
-                    Guardar Tasa
-                  </button>
-                  <button
-                    onClick={() => { setEditandoTasaActiva(false); setTasaActivaEdit(tasaActiva); }}
-                    className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {/* Historial de Tasas Activas */}
-            {historialTasasActivas.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs text-neutral-400 mb-2">Historial de Tasas</p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {historialTasasActivas.slice(0, 6).map((t, idx) => (
-                    <div key={idx} className="flex justify-between text-xs p-2 bg-neutral-700/50 rounded">
-                      <span className="text-neutral-400">{t.mes.toString().padStart(2, '0')}/{t.ano}</span>
-                      <span className="text-yellow-400">{t.tasa.toFixed(2)}%</span>
+            <div className="text-sm text-neutral-400">
+              Tasa Actual: <span className="text-yellow-400 font-bold">{tasaActiva.toFixed(2)}%</span>
+            </div>
+          </div>
+          
+          {/* Tabla de Tasas del Año */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-700">
+                <tr>
+                  <th className="px-3 py-2 text-left text-neutral-300">Mes</th>
+                  <th className="px-3 py-2 text-right text-neutral-300">Tasa (%)</th>
+                  <th className="px-3 py-2 text-center text-neutral-300">Fuente</th>
+                  <th className="px-3 py-2 text-center text-neutral-300">Última Modificación</th>
+                  <th className="px-3 py-2 text-center text-neutral-300">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-700">
+                {tasasAnuales.map((t) => (
+                  <tr key={t.mes} className="hover:bg-neutral-750">
+                    <td className="px-3 py-2 text-white">{t.nombreMes}</td>
+                    <td className="px-3 py-2 text-right text-yellow-400 font-medium">{t.tasa.toFixed(2)}%</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`px-2 py-0.5 text-xs rounded ${t.fuente === 'Manual' ? 'bg-blue-600/20 text-blue-400' : 'bg-green-600/20 text-green-400'}`}>
+                        {t.fuente}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center text-neutral-400 text-xs">
+                      {t.modificado_por !== '-' ? (
+                        <div>{t.modificado_por}</div>
+                      ) : '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => handleEditarTasaMensual(t.mes, t.tasa)}
+                        className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded"
+                        title="Editar tasa"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Sección de Auditoría */}
+          {mostrarAuditoria && (
+            <div className="mt-4 p-4 bg-neutral-700/50 rounded-lg">
+              <h4 className="text-sm font-semibold text-white mb-2">Historial de Cambios</h4>
+              {auditoria.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                  {auditoria.slice(0, 10).map((a, idx) => (
+                    <div key={idx} className="flex justify-between text-xs p-2 bg-neutral-700 rounded">
+                      <span className="text-neutral-400">
+                        {a.mes.toString().padStart(2, '0')}/{a.ano} - {a.usuario}
+                      </span>
+                      <span className="text-red-400">{a.tasa_anterior.toFixed(2)}% → </span>
+                      <span className="text-green-400">{a.tasa_nueva.toFixed(2)}%</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
+              ) : (
+                <p className="text-neutral-400 text-sm">No hay cambios registrados</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Parámetros Salariales */}
@@ -1876,6 +1966,62 @@ function ParametrosView() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Confirmación para Cambio de Tasa */}
+      {mostrarConfirmacion && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-neutral-800 rounded-xl p-6 max-w-md w-full mx-4 border border-yellow-600">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-yellow-600/20 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Advertencia</h3>
+                <p className="text-sm text-neutral-400">Cambio de Tasa Activa</p>
+              </div>
+            </div>
+            
+            <div className="bg-neutral-700/50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-neutral-300 mb-2">
+                Está a punto de modificar la tasa activa para el período:
+              </p>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-neutral-400">Mes/Año:</span>
+                <span className="text-white font-medium">{mesTasaActiva}/{anoTasaActiva}</span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-neutral-400">Tasa Anterior:</span>
+                <span className="text-red-400 font-medium">{tasaAnterior.toFixed(2)}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-neutral-400">Nueva Tasa:</span>
+                <span className="text-green-400 font-medium">{tasaActivaEdit.toFixed(2)}%</span>
+              </div>
+            </div>
+            
+            <div className="bg-yellow-600/10 border border-yellow-600/30 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-400">
+                ⚠️ Esta acción modificará los cálculos de intereses de prestaciones de meses anteriores. ¿Desea continuar?
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setMostrarConfirmacion(false)}
+                className="flex-1 px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => confirmarGuardadoTasa()}
+                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium"
+              >
+                Confirmar Cambio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
