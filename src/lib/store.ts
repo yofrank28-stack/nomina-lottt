@@ -34,6 +34,8 @@ export interface Usuario {
   nombre_completo: string;
   rol: 'ADMIN_MAESTRO' | 'ADMIN_EMPRESA' | 'OPERADOR';
   empresa_id?: number;
+  empresas_permitidas?: number[]; // IDs de empresas que puede ver/gestionar
+  es_super_admin?: boolean; //true solo para ADMIN_MAESTRO
 }
 
 export interface Empleado {
@@ -53,6 +55,7 @@ export interface Empleado {
   tipo_contrato: 'FIJO' | 'INDEFINIDO' | 'TEMPORAL';
   tiene_hijos: boolean;
   cantidad_hijos: number;
+  empresa_nombre?: string; // Nombre de la empresa para mostrar
 }
 
 export interface Parametros {
@@ -106,6 +109,8 @@ interface AppState {
   
   // Datos
   empresas: Empresa[];
+  empresasPermitidas: number[]; // IDs de empresas que el usuario puede ver
+  empresaSeleccionadaId: number | null; // Empresa actualmente seleccionada
   empleados: Empleado[];
   liquidaciones: Liquidacion[];
   parametros: Parametros;
@@ -126,6 +131,12 @@ interface AppState {
   // Acciones
   setUsuario: (usuario: Usuario | null) => void;
   setEmpresas: (empresas: Empresa[]) => void;
+  setEmpresasPermitidas: (empresas: number[]) => void;
+  setEmpresaSeleccionada: (id: number | null) => void;
+  getEmpresasfiltradas: () => Empresa[];
+  getEmpleadosFiltrados: () => Empleado[];
+  puedeGestionarEmpresa: (empresaId: number) => boolean;
+  puedeVerTodasEmpresas: () => boolean;
   setEmpleados: (empleados: Empleado[]) => void;
   setLiquidaciones: (liquidaciones: Liquidacion[]) => void;
   setParametros: (parametros: Parametros) => void;
@@ -174,6 +185,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   usuario: null,
   isAuthenticated: false,
   empresas: [],
+  empresasPermitidas: [],
+  empresaSeleccionadaId: null,
   empleados: [],
   liquidaciones: [],
   parametros: initialParametros,
@@ -190,6 +203,48 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
   setEmpresas: (empresas) => set({ empresas }),
+  setEmpresasPermitidas: (empresasPermitidas) => set({ empresasPermitidas }),
+  setEmpresaSeleccionada: (empresaSeleccionadaId) => set({ empresaSeleccionadaId }),
+  
+  // Obtener empresas filtradas según permisos
+  getEmpresasfiltradas: () => {
+    const { empresas, empresasPermitidas, usuario } = get();
+    if (!usuario) return [];
+    // ADMIN_MAESTRO puede ver todas
+    if (usuario.rol === 'ADMIN_MAESTRO') return empresas;
+    // Otros roles ven solo empresas permitidas
+    return empresas.filter(e => empresasPermitidas.includes(e.id));
+  },
+  
+  // Obtener empleados filtrados por empresa
+  getEmpleadosFiltrados: () => {
+    const { empleados, empresaSeleccionadaId, usuario } = get();
+    if (!usuario) return [];
+    // ADMIN_MAESTRO con empresa null puede ver todos
+    if (usuario.rol === 'ADMIN_MAESTRO' && !empresaSeleccionadaId) return empleados;
+    // Filtrar por empresa seleccionada
+    if (empresaSeleccionadaId) {
+      return empleados.filter(e => e.empresa_id === empresaSeleccionadaId);
+    }
+    return empleados;
+  },
+  
+  // Verificar si puede gestionar una empresa
+  puedeGestionarEmpresa: (empresaId: number) => {
+    const { usuario, empresasPermitidas } = get();
+    if (!usuario) return false;
+    // ADMIN_MAESTRO puede gestionar todo
+    if (usuario.rol === 'ADMIN_MAESTRO') return true;
+    // Otros solo pueden gestionar empresas permitidas
+    return empresasPermitidas.includes(empresaId);
+  },
+  
+  // Verificar si puede ver todas las empresas
+  puedeVerTodasEmpresas: () => {
+    const { usuario } = get();
+    return usuario?.rol === 'ADMIN_MAESTRO';
+  },
+  
   setEmpleados: (empleados) => set({ empleados }),
   setLiquidaciones: (liquidaciones) => set({ liquidaciones }),
   setParametros: (parametros) => set({ parametros }),
@@ -254,30 +309,81 @@ export const useAppStore = create<AppState>((set, get) => ({
           username: 'admin',
           nombre_completo: 'Administrador Maestro',
           rol: 'ADMIN_MAESTRO',
-          empresa_id: 1
+          empresa_id: 1,
+          es_super_admin: true
         };
         
         // Datos de demo
         const empresas: Empresa[] = [
           { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false },
-          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true }
+          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true },
+          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true }
         ];
+        
+        // ADMIN_MAESTRO tiene acceso a todas las empresas
+        const empresasPermitidas = empresas.map(e => e.id);
         
         const empleados: Empleado[] = [
           { id: 1, empresa_id: 2, cedula: 'V-12345678', nombre: 'Juan', apellido: 'Pérez', fecha_ingreso: '2020-01-15', sueldo_base: 500, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 2, cargo: 'Analista', departamento: 'Contabilidad' },
           { id: 2, empresa_id: 2, cedula: 'V-87654321', nombre: 'María', apellido: 'García', fecha_ingreso: '2021-06-01', sueldo_base: 450, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Asistente', departamento: 'Administración' },
-          { id: 3, empresa_id: 2, cedula: 'E-12345678', nombre: 'Carlos', apellido: 'López', fecha_ingreso: '2019-03-20', sueldo_base: 600, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 1, cargo: 'Gerente', departamento: 'Gerencia' }
+          { id: 3, empresa_id: 2, cedula: 'E-12345678', nombre: 'Carlos', apellido: 'López', fecha_ingreso: '2019-03-20', sueldo_base: 600, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 1, cargo: 'Gerente', departamento: 'Gerencia' },
+          { id: 4, empresa_id: 3, cedula: 'V-11223344', nombre: 'Ana', apellido: 'Martínez', fecha_ingreso: '2022-01-10', sueldo_base: 350, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Contador', departamento: 'Contabilidad' }
         ];
         
         set({
           usuario,
           empresas,
+          empresasPermitidas,
+          empresaSeleccionadaId: null, // ADMIN_MAESTRO puede ver todas
           empleados,
           isAuthenticated: true,
           loading: false
         });
         
         // Cargar historial de tasas BCV al iniciar
+        get().cargarHistorialTasas();
+        
+        return true;
+      }
+      
+      // Usuario demo: ADMIN_EMPRESA (solo puede ver una empresa)
+      if (username === 'contador' && password === 'Contador123!') {
+        const usuario: Usuario = {
+          id: 2,
+          username: 'contador',
+          nombre_completo: 'Contador Empresa X',
+          rol: 'ADMIN_EMPRESA',
+          empresa_id: 3,
+          empresas_permitidas: [3],
+          es_super_admin: false
+        };
+        
+        const empresas: Empresa[] = [
+          { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false },
+          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true },
+          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true }
+        ];
+        
+        // Solo puede ver la empresa 3
+        const empresasPermitidas = [3];
+        
+        const empleados: Empleado[] = [
+          { id: 1, empresa_id: 2, cedula: 'V-12345678', nombre: 'Juan', apellido: 'Pérez', fecha_ingreso: '2020-01-15', sueldo_base: 500, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 2, cargo: 'Analista', departamento: 'Contabilidad' },
+          { id: 2, empresa_id: 2, cedula: 'V-87654321', nombre: 'María', apellido: 'García', fecha_ingreso: '2021-06-01', sueldo_base: 450, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Asistente', departamento: 'Administración' },
+          { id: 3, empresa_id: 2, cedula: 'E-12345678', nombre: 'Carlos', apellido: 'López', fecha_ingreso: '2019-03-20', sueldo_base: 600, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'INDEFINIDO', tiene_hijos: true, cantidad_hijos: 1, cargo: 'Gerente', departamento: 'Gerencia' },
+          { id: 4, empresa_id: 3, cedula: 'V-11223344', nombre: 'Ana', apellido: 'Martínez', fecha_ingreso: '2022-01-10', sueldo_base: 350, tipo_moneda_sueldo: 'USD', estatus: 'ACTIVO', tipo_contrato: 'FIJO', tiene_hijos: false, cantidad_hijos: 0, cargo: 'Contador', departamento: 'Contabilidad' }
+        ];
+        
+        set({
+          usuario,
+          empresas,
+          empresasPermitidas,
+          empresaSeleccionadaId: 3, // Solo puede ver empresa 3
+          empleados,
+          isAuthenticated: true,
+          loading: false
+        });
+        
         get().cargarHistorialTasas();
         
         return true;
@@ -296,6 +402,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       usuario: null,
       isAuthenticated: false,
       empresas: [],
+      empresasPermitidas: [],
+      empresaSeleccionadaId: null,
       empleados: [],
       liquidaciones: [],
       currentView: 'dashboard'

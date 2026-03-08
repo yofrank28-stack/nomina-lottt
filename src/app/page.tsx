@@ -125,6 +125,9 @@ function Dashboard() {
     usuario,
     empresas,
     empleados,
+    empresasPermitidas,
+    empresaSeleccionadaId,
+    setEmpresaSeleccionada,
     liquidaciones,
     parametros,
     currentView,
@@ -135,11 +138,22 @@ function Dashboard() {
     tasaActiva,
     setTasaActiva,
     setSuccessMessage,
-    setError
+    setError,
+    puedeVerTodasEmpresas
   } = useAppStore();
 
   const [loadingTasa, setLoadingTasa] = useState(false);
   const [mostrarEnBsGlobal, setMostrarEnBsGlobal] = useState(true);
+
+  // Obtener empresas permitidas para el selector
+  const empresasParaSelector = puedeVerTodasEmpresas() 
+    ? empresas 
+    : empresas.filter(e => empresasPermitidas.includes(e.id));
+
+  // Filtrar empleados según empresa seleccionada
+  const empleadosFiltrados = empresaSeleccionadaId
+    ? empleados.filter(e => e.empresa_id === empresaSeleccionadaId)
+    : empleados;
 
   // Cargar tasa BCV al inicio
   useEffect(() => {
@@ -157,20 +171,20 @@ function Dashboard() {
   }, [setTasaCambio]);
 
   // Obtener empleados activos
-  const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
+  const empleadosActivos = empleadosFiltrados.filter(e => e.estatus === 'ACTIVO');
 
   // Calcular nómina total
   const nominaTotal = empleadosActivos.reduce((sum, e) => { const monto = e.tipo_moneda_sueldo === "USD" ? e.sueldo_base : e.sueldo_base / tasaCambio; return sum + monto; }, 0);
   const nominaBs = nominaTotal;
 
   const views = {
-    dashboard: <DashboardView />,
-    empresas: <EmpresasView />,
-    empleados: <EmpleadosView mostrarEnBs={mostrarEnBsGlobal} />,
-    nomina: <NominaView />,
-    reportes: <ReportesView />,
+    dashboard: <DashboardView empresaId={empresaSeleccionadaId} />,
+    empresas: puedeVerTodasEmpresas() ? <EmpresasView /> : <DashboardView empresaId={empresaSeleccionadaId} />,
+    empleados: <EmpleadosView mostrarEnBs={mostrarEnBsGlobal} empresaId={empresaSeleccionadaId} />,
+    nomina: <NominaView empresaId={empresaSeleccionadaId} />,
+    reportes: <ReportesView empresaId={empresaSeleccionadaId} />,
     parametros: <ParametrosView />,
-    contabilidad: <ContabilidadView />
+    contabilidad: <ContabilidadView empresaId={empresaSeleccionadaId} />
   };
 
   return (
@@ -212,6 +226,28 @@ function Dashboard() {
                 >
                   BS
                 </button>
+              </div>
+
+              {/* Selector de Empresa */}
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-neutral-400" />
+                <select
+                  value={empresaSeleccionadaId || ''}
+                  onChange={(e) => setEmpresaSeleccionada(e.target.value ? Number(e.target.value) : null)}
+                  className={`bg-neutral-700 text-white text-sm rounded-lg px-3 py-1.5 border border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    !puedeVerTodasEmpresas() ? 'cursor-not-allowed opacity-75' : ''
+                  }`}
+                  disabled={!puedeVerTodasEmpresas()}
+                >
+                  {puedeVerTodasEmpresas() && (
+                    <option value="">Todas las Empresas</option>
+                  )}
+                  {empresasParaSelector.map(empresa => (
+                    <option key={empresa.id} value={empresa.id}>
+                      {empresa.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Tasa BCV */}
@@ -279,7 +315,7 @@ function Dashboard() {
           <div className="flex gap-1 h-12">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Building2 },
-              { id: 'empresas', label: 'Empresas', icon: Building2 },
+              ...(puedeVerTodasEmpresas() ? [{ id: 'empresas', label: 'Empresas', icon: Building2 }] : []),
               { id: 'empleados', label: 'Empleados', icon: Users },
               { id: 'nomina', label: 'Nómina', icon: Receipt },
               { id: 'reportes', label: 'Reportes', icon: FileText },
@@ -314,10 +350,16 @@ function Dashboard() {
 // ============================================================
 // VISTA: DASHBOARD
 // ============================================================
-function DashboardView() {
-  const { empresas, empleados, tasaCambio } = useAppStore();
+function DashboardView({ empresaId }: { empresaId?: number | null }) {
+  const { empresas, empleados, tasaCambio, puedeVerTodasEmpresas } = useAppStore();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
-  const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO');
+  
+  // Filtrar empleados por empresa si está seleccionada
+  const empleadosFiltrados = empresaId 
+    ? empleados.filter(e => e.empresa_id === empresaId) 
+    : empleados;
+  
+  const empleadosActivos = empleadosFiltrados.filter(e => e.estatus === 'ACTIVO');
   
   // Calcular nómina mensual en USD y BS
   const nominaEnUsd = empleadosActivos.reduce((sum, e) => { 
@@ -326,10 +368,15 @@ function DashboardView() {
   }, 0);
   const nominaEnBs = nominaEnUsd * tasaCambio;
 
+  // Obtener empresas para mostrar
+  const empresasFiltradas = puedeVerTodasEmpresas() && !empresaId 
+    ? empresas 
+    : empresas.filter(e => e.id === empresaId);
+
   const stats = [
     {
-      label: "Empresas Registradas",
-      value: empresas.length,
+      label: "Empresas",
+      value: empresasFiltradas.length,
       icon: Building2,
       color: "bg-blue-600"
     },
@@ -649,17 +696,26 @@ function EmpresasView() {
 // ============================================================
 // VISTA: EMPLEADOS
 // ============================================================
-function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado } = useAppStore();
+function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empresaId?: number | null }) {
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editMode, setEditMode] = useState<number | null>(null);
   const [egresandoId, setEgresandoId] = useState<number | null>(null);
-  const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>('all');
+  const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>(empresaId || 'all');
   const [fechaEgreso, setFechaEgreso] = useState("");
   const [causaEgreso, setCausaEgreso] = useState("");
+  
+  // Filtrar empresas según permisos
+  const empresasPermitidasList = puedeVerTodasEmpresas() 
+    ? empresas 
+    : empresas.filter(e => empresasPermitidas.includes(e.id));
+  
+  // Inicializar empresa_id por defecto
+  const empresaDefault = empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
+  
   const [formData, setFormData] = useState({
-    empresa_id: 2,
+    empresa_id: empresaDefault,
     cedula: "",
     nombre: "",
     apellido: "",
@@ -674,6 +730,30 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
     tiene_hijos: false,
     cantidad_hijos: 0
   });
+  
+  // Filtrar empleados según empresa seleccionada y permisos
+  const empleadosFiltrados = empleados.filter(emp => {
+    const empresaSeleccionada = empresaFilter === 'all' ? true : emp.empresa_id === empresaFilter;
+    const tienePermiso = puedeVerTodasEmpresas() || empresasPermitidas.includes(emp.empresa_id);
+    return empresaSeleccionada && tienePermiso;
+  });
+
+  // Aplicar filtros de búsqueda
+  const empleadosAMostrar = empleadosFiltrados.filter(emp => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      emp.nombre.toLowerCase().includes(searchLower) ||
+      emp.apellido?.toLowerCase().includes(searchLower) ||
+      emp.cedula.toLowerCase().includes(searchLower) ||
+      emp.cargo?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Obtener nombre de empresa por ID
+  const getEmpresaNombre = (empresaId: number) => {
+    const empresa = empresas.find(e => e.id === empresaId);
+    return empresa?.nombre || 'Desconocida';
+  };
 
   // Validar cédula única
   const validarCedulaUnica = (cedula: string, empresa_id: number, excludeId?: number): boolean => {
@@ -703,7 +783,7 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
     }
     setShowForm(false);
     setFormData({
-      empresa_id: 2,
+      empresa_id: empresaDefault,
       cedula: "",
       nombre: "",
       apellido: "",
@@ -761,11 +841,14 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
   };
 
   // Filtrar empleados por empresa (aislamiento multi-tenant)
-  const filteredEmpleados = empleados.filter(e => {
-    const matchesSearch = e.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.cedula.includes(searchTerm);
-    const matchesEmpresa = empresaFilter === 'all' || e.empresa_id === empresaFilter;
-    return matchesSearch && matchesEmpresa;
+  // Primero filtra por permisos, luego por búsqueda y empresa
+  const filteredEmpleados = empleadosFiltrados.filter(e => {
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = e.nombre.toLowerCase().includes(searchLower) ||
+      (e.apellido?.toLowerCase().includes(searchLower) || false) ||
+      e.cedula.includes(searchTerm) ||
+      (e.cargo?.toLowerCase().includes(searchLower) || false);
+    return matchesSearch;
   });
 
   return (
@@ -803,7 +886,7 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
             className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white"
           >
             <option value="all">Todas las Empresas</option>
-            {empresas.filter(e => e.id !== 1).map(e => (
+            {empresasPermitidasList.map(e => (
               <option key={e.id} value={e.id}>{e.nombre}</option>
             ))}
           </select>
@@ -824,7 +907,7 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
                 className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
                 required
               >
-                {empresas.filter(e => e.id !== 1).map(e => (
+                {empresasPermitidasList.map(e => (
                   <option key={e.id} value={e.id}>{e.nombre}</option>
                 ))}
               </select>
@@ -1067,23 +1150,31 @@ function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
 // ============================================================
 // VISTA: NÓMINA
 // ============================================================
-function NominaView() {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros } = useAppStore();
+function NominaView({ empresaId }: { empresaId?: number | null }) {
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
   const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
-  const [empresaSeleccionada, setEmpresaSeleccionada] = useState<number>(
-    empresas.find(e => e.id !== 1)?.id || 2
-  );
+  
+  // Obtener empresas permitidas para el selector
+  const empresasPermitidasList = puedeVerTodasEmpresas() 
+    ? empresas.filter(e => e.id !== 1) 
+    : empresas.filter(e => empresasPermitidas.includes(e.id));
+  
+  // Usar empresaId si está seleccionado, o la primera empresa permitida
+  const empresaDefault = empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState<number>(empresaDefault);
 
   // Filtrar empleados activos por empresa seleccionada (aislamiento multi-tenant)
-  const empleadosActivos = empleados.filter(e =>
-    e.estatus === 'ACTIVO' &&
-    e.empresa_id !== 1 &&
-    e.empresa_id === empresaSeleccionada
-  );
+  const empleadosActivos = empleados.filter(e => {
+    const tienePermiso = puedeVerTodasEmpresas() || empresasPermitidas.includes(e.empresa_id);
+    return e.estatus === 'ACTIVO' &&
+      e.empresa_id !== 1 &&
+      e.empresa_id === empresaSeleccionada &&
+      tienePermiso;
+  });
 
   const procesarNomina = async () => {
     setProcesando(true);
@@ -1253,8 +1344,9 @@ function NominaView() {
               value={empresaSeleccionada}
               onChange={(e) => setEmpresaSeleccionada(parseInt(e.target.value))}
               className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[200px]"
+              disabled={!puedeVerTodasEmpresas() && empresasPermitidas.length === 1}
             >
-              {empresas.filter(e => e.id !== 1).map(e => (
+              {empresasPermitidasList.map(e => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
               ))}
             </select>
@@ -1400,8 +1492,17 @@ function NominaView() {
 // ============================================================
 // VISTA: REPORTES
 // ============================================================
-function ReportesView() {
-  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage } = useAppStore();
+function ReportesView({ empresaId }: { empresaId?: number | null }) {
+  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
+  
+  // Obtener empresas permitidas para el selector
+  const empresasPermitidasList = puedeVerTodasEmpresas() 
+    ? empresas.filter(e => e.id !== 1) 
+    : empresas.filter(e => empresasPermitidas.includes(e.id));
+  
+  const [empresaReporte, setEmpresaReporte] = useState<number>(
+    empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2)
+  );
 
   const generarReciboPDF = (liquidacion: Liquidacion) => {
     const emp = empleados.find(e => e.id === liquidacion.empleado_id);
@@ -2032,14 +2133,26 @@ function ParametrosView() {
 // ============================================================
 // VISTA: CONTABILIDAD
 // ============================================================
-function ContabilidadView() {
-  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, setError, tasaActiva, obtenerTasaActivaParaCalculo } = useAppStore();
+function ContabilidadView({ empresaId }: { empresaId?: number | null }) {
+  const { empleados, empresas, liquidaciones, tasaCambio, setSuccessMessage, setError, tasaActiva, obtenerTasaActivaParaCalculo, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
   const [ano, setAno] = useState(new Date().getFullYear());
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [procesando, setProcesando] = useState(false);
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
+  
+  // Obtener empresas permitidas
+  const empresasPermitidasList = puedeVerTodasEmpresas() 
+    ? empresas.filter(e => e.id !== 1) 
+    : empresas.filter(e => empresasPermitidas.includes(e.id));
+  
+  const empresaDefault = empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
+  const [empresaContabilidad, setEmpresaContabilidad] = useState<number>(empresaDefault);
 
-  const empleadosActivos = empleados.filter(e => e.estatus === 'ACTIVO' && e.empresa_id !== 1);
+  // Filtrar empleados activos por empresa y permisos
+  const empleadosActivos = empleados.filter(e => {
+    const tienePermiso = puedeVerTodasEmpresas() || empresasPermitidas.includes(e.empresa_id);
+    return e.estatus === 'ACTIVO' && e.empresa_id !== 1 && tienePermiso;
+  });
   
   // Calcular provisiones laborales
   const calcularProvisiones = () => {
