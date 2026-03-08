@@ -166,7 +166,7 @@ function Dashboard() {
   const views = {
     dashboard: <DashboardView />,
     empresas: <EmpresasView />,
-    empleados: <EmpleadosView />,
+    empleados: <EmpleadosView mostrarEnBs={mostrarEnBsGlobal} />,
     nomina: <NominaView />,
     reportes: <ReportesView />,
     parametros: <ParametrosView />,
@@ -649,7 +649,7 @@ function EmpresasView() {
 // ============================================================
 // VISTA: EMPLEADOS
 // ============================================================
-function EmpleadosView() {
+function EmpleadosView({ mostrarEnBs }: { mostrarEnBs: boolean }) {
   const { empleados, empresas, tasaCambio, setSuccessMessage, setError, addEmpleado, updateEmpleado, deleteEmpleado, egressEmpleado } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -951,7 +951,7 @@ function EmpleadosView() {
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Nombre</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Empresa</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Cargo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Sueldo Bs.</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">{mostrarEnBs ? 'Sueldo Bs.' : 'Sueldo USD'}</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-neutral-300 uppercase">Estatus</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-neutral-300 uppercase">Acciones</th>
             </tr>
@@ -965,7 +965,10 @@ function EmpleadosView() {
                   <td className="px-4 py-3 text-white">{empleado.nombre} {empleado.apellido}</td>
                   <td className="px-4 py-3 text-neutral-300">{empresa?.nombre || 'N/A'}</td>
                   <td className="px-4 py-3 text-neutral-300">{empleado.cargo || '-'}</td>
-                  <td className="px-4 py-3 text-white font-medium">{empleado.tipo_moneda_sueldo === "USD" ? "$" : "Bs. "}{empleado.tipo_moneda_sueldo === "USD" ? empleado.sueldo_base.toFixed(2) : (empleado.sueldo_base * tasaCambio).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-white font-medium">{mostrarEnBs ? "Bs. " : "$"}{mostrarEnBs 
+                    ? (empleado.tipo_moneda_sueldo === "USD" ? (empleado.sueldo_base * tasaCambio).toFixed(2) : empleado.sueldo_base.toFixed(2))
+                    : (empleado.tipo_moneda_sueldo === "USD" ? empleado.sueldo_base.toFixed(2) : (empleado.sueldo_base / tasaCambio).toFixed(2))
+                  }</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs rounded ${
                       empleado.estatus === 'ACTIVO' ? 'bg-green-600/20 text-green-400' :
