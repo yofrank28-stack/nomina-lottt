@@ -15,7 +15,7 @@
     "react-dom": "^19.2.3",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.1",
-    "lucide-react": "^0.294.0",
+    "lucide-react": "^0.469.0",
     "zustand": "^4.4.7",
     "bcryptjs": "^2.4.3"
   },
