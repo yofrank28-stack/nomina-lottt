@@ -11,11 +11,11 @@ git clone https://github.com/yofrank28-stack/nomina-lottt.git nomina-lottt
 # 2. Entrar al directorio
 cd nomina-lottt
 
-# 3. Instalar dependencias (usando Bun)
-bun install
+# 3. Instalar dependencias (usando npm)
+npm install
 
 # 4. Iniciar el servidor de desarrollo
-bun dev
+npm run dev
 
 # 5. Abrir en el navegador
 # http://localhost:3000
@@ -31,10 +31,10 @@ cd nomina-lottt
 git pull origin main
 
 # 3. Actualizar dependencias
-bun install
+npm install
 
 # 4. Iniciar el servidor
-bun dev
+npm run dev
 ```
 
 ### Verificación post-instalación
@@ -44,10 +44,10 @@ bun dev
 npm audit
 
 # Verificar tipos TypeScript
-bun typecheck
+npm run typecheck
 
 # Verificar código con ESLint
-bun lint
+npm run lint
 ```
 
 ---
@@ -144,8 +144,8 @@ if (username === 'admin' && password === 'TU_NUEVA_CONTRASEÑA') {
 | URL | http://localhost:3000 |
 | Usuario Admin | admin |
 | Contraseña Admin | Admin123! |
-| Comando iniciar | bun dev |
-| Comando instalar | bun install |
+| Comando iniciar | npm run dev |
+| Comando instalar | npm install |
 
 ---
 
