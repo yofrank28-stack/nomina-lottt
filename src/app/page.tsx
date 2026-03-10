@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import useAppStore, { Empresa, Empleado, Liquidacion } from "../lib/store";
 import { engineLOTTT, ParametrosNomina } from "../lib/engine-lottt";
 import { getTasaCambio } from "../lib/bcv-service";
@@ -121,6 +122,7 @@ function LoginPage() {
 // COMPONENTE: DASHBOARD
 // ============================================================
 function Dashboard() {
+  const router = useRouter();
   const {
     usuario,
     empresas,
@@ -139,11 +141,38 @@ function Dashboard() {
     setTasaActiva,
     setSuccessMessage,
     setError,
-    puedeVerTodasEmpresas
+    puedeVerTodasEmpresas,
+    getEmpresaStatus
   } = useAppStore();
 
   const [loadingTasa, setLoadingTasa] = useState(false);
   const [mostrarEnBsGlobal, setMostrarEnBsGlobal] = useState(true);
+
+  // Verificar status de empresa al cambiar selección
+  useEffect(() => {
+    if (empresaSeleccionadaId && usuario?.rol !== 'ADMIN_MAESTRO') {
+      const status = getEmpresaStatus(empresaSeleccionadaId);
+      if (status === 'suspended' || status === 'terminated') {
+        router.push(`/service-suspended?empresa=${empresaSeleccionadaId}`);
+      }
+    }
+  }, [empresaSeleccionadaId, usuario, getEmpresaStatus, router]);
+
+  // Verificar acceso al cambiar de vista
+  const handleViewChange = (view: string) => {
+    if (empresaSeleccionadaId && usuario?.rol !== 'ADMIN_MAESTRO') {
+      const status = getEmpresaStatus(empresaSeleccionadaId);
+      if (status === 'suspended' || status === 'terminated') {
+        // Solo permitir vistas limitadas
+        const allowedViews = ['dashboard'];
+        if (!allowedViews.includes(view)) {
+          setSuccessMessage('Su servicio está suspendido. Contacte al administrador.');
+          return;
+        }
+      }
+    }
+    setCurrentView(view as any);
+  };
 
   // Obtener empresas permitidas para el selector
   const empresasParaSelector = puedeVerTodasEmpresas() 
@@ -324,7 +353,7 @@ function Dashboard() {
             ].map(item => (
               <button
                 key={item.id}
-                onClick={() => setCurrentView(item.id as any)}
+                onClick={() => handleViewChange(item.id)}
                 className={`flex items-center gap-2 px-4 text-sm font-medium transition-colors ${
                   currentView === item.id
                     ? 'text-blue-400 border-b-2 border-blue-400'
@@ -480,7 +509,7 @@ function DashboardView({ empresaId }: { empresaId?: number | null }) {
 // VISTA: EMPRESAS
 // ============================================================
 function EmpresasView() {
-  const { empresas, setSuccessMessage, addEmpresa, updateEmpresa } = useAppStore();
+  const { empresas, setSuccessMessage, addEmpresa, updateEmpresa, cambiarStatusEmpresa, puedeVerTodasEmpresas, usuario } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [editMode, setEditMode] = useState<number | null>(null);
   const [formData, setFormData] = useState({
@@ -490,7 +519,14 @@ function EmpresasView() {
     telefono: "",
     email: "",
     lunes_mes: 4,
-    es_inces_contribuyente: false
+    es_inces_contribuyente: false,
+    // Datos de contacto para pagos
+    admin_master_email: "",
+    admin_master_telefono: "",
+    admin_master_zelle: "",
+    admin_master_pago_movil: "",
+    admin_master_banco: "",
+    admin_master_cuenta: ""
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -500,7 +536,7 @@ function EmpresasView() {
       setSuccessMessage("Empresa actualizada correctamente");
       setEditMode(null);
     } else {
-      addEmpresa(formData);
+      addEmpresa(formData as any);
       setSuccessMessage("Empresa creada correctamente");
     }
     setShowForm(false);
@@ -511,7 +547,13 @@ function EmpresasView() {
       telefono: "",
       email: "",
       lunes_mes: 4,
-      es_inces_contribuyente: false
+      es_inces_contribuyente: false,
+      admin_master_email: "",
+      admin_master_telefono: "",
+      admin_master_zelle: "",
+      admin_master_pago_movil: "",
+      admin_master_banco: "",
+      admin_master_cuenta: ""
     });
   };
 
@@ -523,7 +565,13 @@ function EmpresasView() {
       telefono: empresa.telefono || "",
       email: empresa.email || "",
       lunes_mes: empresa.lunes_mes,
-      es_inces_contribuyente: empresa.es_inces_contribuyente
+      es_inces_contribuyente: empresa.es_inces_contribuyente,
+      admin_master_email: empresa.admin_master_email || "",
+      admin_master_telefono: empresa.admin_master_telefono || "",
+      admin_master_zelle: empresa.admin_master_zelle || "",
+      admin_master_pago_movil: empresa.admin_master_pago_movil || "",
+      admin_master_banco: empresa.admin_master_banco || "",
+      admin_master_cuenta: empresa.admin_master_cuenta || ""
     });
     setEditMode(empresa.id);
     setShowForm(true);
@@ -539,7 +587,13 @@ function EmpresasView() {
       telefono: "",
       email: "",
       lunes_mes: 4,
-      es_inces_contribuyente: false
+      es_inces_contribuyente: false,
+      admin_master_email: "",
+      admin_master_telefono: "",
+      admin_master_zelle: "",
+      admin_master_pago_movil: "",
+      admin_master_banco: "",
+      admin_master_cuenta: ""
     });
   };
 
@@ -636,6 +690,73 @@ function EmpresasView() {
                 Contribuyente INCES
               </label>
             </div>
+            
+            {/* Datos de Contacto para Pagos */}
+            <div className="md:col-span-2 mt-4">
+              <h4 className="text-md font-semibold text-white mb-3">Datos de Contacto para Pagos</h4>
+            </div>
+            
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Email Admin Master</label>
+              <input
+                type="email"
+                value={formData.admin_master_email}
+                onChange={(e) => setFormData({ ...formData, admin_master_email: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="admin@ejemplo.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Teléfono Admin Master</label>
+              <input
+                type="text"
+                value={formData.admin_master_telefono}
+                onChange={(e) => setFormData({ ...formData, admin_master_telefono: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="+58 412-1234567"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Zelle</label>
+              <input
+                type="text"
+                value={formData.admin_master_zelle}
+                onChange={(e) => setFormData({ ...formData, admin_master_zelle: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="admin@zelle.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Pago Móvil</label>
+              <input
+                type="text"
+                value={formData.admin_master_pago_movil}
+                onChange={(e) => setFormData({ ...formData, admin_master_pago_movil: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="0412-1234567"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Banco</label>
+              <input
+                type="text"
+                value={formData.admin_master_banco}
+                onChange={(e) => setFormData({ ...formData, admin_master_banco: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="Banco de Venezuela"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Número de Cuenta</label>
+              <input
+                type="text"
+                value={formData.admin_master_cuenta}
+                onChange={(e) => setFormData({ ...formData, admin_master_cuenta: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="0102-1234-5678-9012"
+              />
+            </div>
+            
             <div className="md:col-span-2 flex gap-2">
               <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
                 <Save className="w-4 h-4" />
@@ -657,10 +778,31 @@ function EmpresasView() {
       {/* Lista de Empresas */}
       <div className="grid gap-4">
         {empresas.map((empresa) => (
-          <div key={empresa.id} className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
+          <div key={empresa.id} className={`bg-neutral-800 rounded-xl p-6 border ${
+            empresa.status === 'suspended' ? 'border-red-900/50' : 
+            empresa.status === 'terminated' ? 'border-gray-700' : 'border-neutral-700'
+          }`}>
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-white">{empresa.nombre}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-white">{empresa.nombre}</h3>
+                  {/* Status Badge */}
+                  {empresa.status === 'active' && (
+                    <span className="px-2 py-0.5 bg-green-600/20 text-green-400 text-xs rounded-full">
+                      Activo
+                    </span>
+                  )}
+                  {empresa.status === 'suspended' && (
+                    <span className="px-2 py-0.5 bg-red-600/20 text-red-400 text-xs rounded-full">
+                      Suspendido
+                    </span>
+                  )}
+                  {empresa.status === 'terminated' && (
+                    <span className="px-2 py-0.5 bg-gray-600/20 text-gray-400 text-xs rounded-full">
+                      Terminado
+                    </span>
+                  )}
+                </div>
                 <p className="text-neutral-400">RIF: {empresa.rif}</p>
                 {empresa.direccion && (
                   <p className="text-sm text-neutral-500 mt-1">{empresa.direccion}</p>
@@ -686,6 +828,67 @@ function EmpresasView() {
                 )}
               </div>
             </div>
+            
+            {/* Botones de Estado para ADMIN_MAESTRO */}
+            {usuario?.rol === 'ADMIN_MAESTRO' && empresa.id !== 1 && (
+              <div className="mt-4 pt-4 border-t border-neutral-700">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-neutral-400">
+                    Control de Servicio:
+                  </div>
+                  <div className="flex gap-2">
+                    {/* Botón Activar */}
+                    {empresa.status !== 'active' && (
+                      <button
+                        onClick={() => {
+                          cambiarStatusEmpresa(empresa.id, 'active');
+                          setSuccessMessage(`Empresa ${empresa.nombre} activada`);
+                        }}
+                        className="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg text-sm flex items-center gap-1"
+                      >
+                        <Check className="w-3 h-3" />
+                        Activar
+                      </button>
+                    )}
+                    {/* Botón Suspender */}
+                    {empresa.status !== 'suspended' && empresa.status !== 'terminated' && (
+                      <button
+                        onClick={() => {
+                          cambiarStatusEmpresa(empresa.id, 'suspended');
+                          setSuccessMessage(`Empresa ${empresa.nombre} suspendida`);
+                        }}
+                        className="px-3 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded-lg text-sm flex items-center gap-1"
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        Suspender
+                      </button>
+                    )}
+                    {/* Botón Terminar */}
+                    {empresa.status !== 'terminated' && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Está seguro de TERMINAR ${empresa.nombre}? Esta acción es irreversible y generará el expediente final.`)) {
+                            cambiarStatusEmpresa(empresa.id, 'terminated');
+                            setSuccessMessage(`Empresa ${empresa.nombre} terminada. Puede descargar el expediente final.`);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm flex items-center gap-1"
+                      >
+                        <X className="w-3 h-3" />
+                        Terminar
+                      </button>
+                    )}
+                    {/* Indicador de expediente descargado */}
+                    {empresa.status === 'terminated' && empresa.expediente_descargado && (
+                      <span className="px-3 py-1.5 bg-gray-600/20 text-gray-400 rounded-lg text-sm flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Expediente Descargado
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

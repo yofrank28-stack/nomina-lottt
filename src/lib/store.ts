@@ -16,6 +16,9 @@ import {
 } from './bcv-service';
 
 // Tipos
+
+export type EmpresaStatus = 'active' | 'suspended' | 'terminated';
+
 export interface Empresa {
   id: number;
   rif: string;
@@ -26,6 +29,17 @@ export interface Empresa {
   email?: string;
   lunes_mes: number;
   es_inces_contribuyente: boolean;
+  status?: EmpresaStatus;
+  // Datos de contacto para pagos (cuando status = suspended)
+  admin_master_email?: string;
+  admin_master_telefono?: string;
+  admin_master_zelle?: string;
+  admin_master_pago_movil?: string;
+  admin_master_banco?: string;
+  admin_master_cuenta?: string;
+  // Datos de terminación
+  fecha_terminacion?: string;
+  expediente_descargado?: boolean;
 }
 
 export interface Usuario {
@@ -161,6 +175,10 @@ interface AppState {
   // Gestión de empresas
   addEmpresa: (empresa: Omit<Empresa, 'id'>) => void;
   updateEmpresa: (id: number, data: Partial<Empresa>) => void;
+  cambiarStatusEmpresa: (id: number, status: EmpresaStatus) => void;
+  getEmpresaStatus: (id: number) => EmpresaStatus;
+  puedeAccederANomina: (empresaId: number) => boolean;
+  marcarExpedienteDescargado: (id: number) => void;
   
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
@@ -315,9 +333,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         
         // Datos de demo
         const empresas: Empresa[] = [
-          { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false },
-          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true },
-          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true }
+          { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false, status: 'active' },
+          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'active' },
+          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'suspended', 
+            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com',
+            admin_master_pago_movil: '0412-1234567', admin_master_banco: 'Banco de Venezuela', admin_master_cuenta: '0102-1234-5678-9012' },
+          { id: 4, rif: 'J-55555555-5', nombre: 'Empresa Terminada C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'terminated', 
+            fecha_terminacion: '2024-12-31', expediente_descargado: false }
         ];
         
         // ADMIN_MAESTRO tiene acceso a todas las empresas
@@ -359,9 +381,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
         
         const empresas: Empresa[] = [
-          { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false },
-          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true },
-          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true }
+          { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false, status: 'active' },
+          { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'active' },
+          { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'suspended',
+            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com',
+            admin_master_pago_movil: '0412-1234567', admin_master_banco: 'Banco de Venezuela', admin_master_cuenta: '0102-1234-5678-9012' }
         ];
         
         // Solo puede ver la empresa 3
@@ -436,6 +460,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { empresas } = get();
     const nuevasEmpresas = empresas.map(e => 
       e.id === id ? { ...e, ...data } : e
+    );
+    set({ empresas: nuevasEmpresas });
+  },
+  
+  cambiarStatusEmpresa: (id: number, status: EmpresaStatus) => {
+    const { empresas } = get();
+    const nuevasEmpresas = empresas.map(e => {
+      if (e.id === id) {
+        return { 
+          ...e, 
+          status,
+          fecha_terminacion: status === 'terminated' ? new Date().toISOString().split('T')[0] : undefined
+        };
+      }
+      return e;
+    });
+    set({ empresas: nuevasEmpresas });
+  },
+  
+  getEmpresaStatus: (id: number): EmpresaStatus => {
+    const { empresas } = get();
+    const empresa = empresas.find(e => e.id === id);
+    return empresa?.status || 'active';
+  },
+  
+  puedeAccederANomina: (empresaId: number): boolean => {
+    const status = get().getEmpresaStatus(empresaId);
+    // Solo puede acceder si está active o si es ADMIN_MAESTRO
+    const { usuario } = get();
+    if (usuario?.rol === 'ADMIN_MAESTRO') return true;
+    return status === 'active';
+  },
+  
+  marcarExpedienteDescargado: (id: number) => {
+    const { empresas } = get();
+    const nuevasEmpresas = empresas.map(e => 
+      e.id === id ? { ...e, expediente_descargado: true } : e
     );
     set({ empresas: nuevasEmpresas });
   },

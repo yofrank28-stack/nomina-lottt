@@ -430,9 +430,246 @@ export function descargarPDF(doc: jsPDF, nombreArchivo: string): void {
   doc.save(nombreArchivo);
 }
 
+// ============================================================
+// EXPEDIENTE FINAL - Reporte Consolidado de Cierre LOTTT
+// Art. 142 (Garantía de Prestaciones), Art. 143 (Intereses),
+// Art. 192 (Bono Vacacional), Art. 196 (Utilidades)
+// ============================================================
+
+export interface DatosExpedienteFinal {
+  empresa: {
+    nombre: string;
+    rif: string;
+    direccion?: string;
+    telefono?: string;
+    email?: string;
+    fecha_cierre: string;
+  };
+  empleados: {
+    cedula: string;
+    nombre: string;
+    apellido: string;
+    cargo: string;
+    fecha_ingreso: string;
+    fecha_egreso?: string;
+    sueldo_base: number;
+    tipo_moneda: 'USD' | 'VES';
+    estatus: string;
+  }[];
+  liquidaciones: {
+    ano: number;
+    mes: number;
+    quincena: number;
+    total_neto: number;
+    total_asignaciones: number;
+    total_deducciones: number;
+  }[];
+  provisiones: {
+    garantia_prestaciones: number;
+    intereses_prestaciones: number;
+    bono_vacacional: number;
+    utilidades: number;
+  };
+  tasa_cambio: number;
+}
+
+/**
+ * Genera el PDF del Expediente Final de Cierre
+ * Incluye: Reporte de Nómina, Liquidaciones, Pasivos Laborales LOTTT
+ */
+export function generarExpedienteFinalPDF(datos: DatosExpedienteFinal): jsPDF {
+  const doc = new jsPDF();
+  
+  const colorPrimario: Color = [0, 51, 102];  // Azul oscuro
+  const colorSecundario: Color = [51, 51, 51]; // Gris oscuro
+  const colorRojo: Color = [153, 0, 0];        // Rojo para pasivos
+  const colorVerde: Color = [0, 102, 51];      // Verde
+  const colorNaranja: Color = [204, 102, 0];   // Naranja para advertencias
+  
+  // ============================================
+  // PÁGINA 1: ENCABEZADO Y RESUMEN GENERAL
+  // ============================================
+  
+  // Encabezado
+  doc.setFillColor(...colorPrimario);
+  doc.rect(0, 0, 210, 40, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('EXPEDIENTE FINAL DE CIERRE', 105, 15, { align: 'center' });
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema de Gestión de Nómina Venezuela - LOTTT', 105, 23, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.text(`Fecha de Cierre: ${datos.empresa.fecha_cierre}`, 105, 30, { align: 'center' });
+  doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 105, 36, { align: 'center' });
+  
+  // Datos de la empresa
+  doc.setTextColor(...colorSecundario);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(datos.empresa.nombre, 105, 52, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`RIF: ${datos.empresa.rif}`, 105, 59, { align: 'center' });
+  if (datos.empresa.direccion) {
+    doc.text(datos.empresa.direccion, 105, 65, { align: 'center' });
+  }
+  
+  // ============================================
+  // RESUMEN DE PASIVOS LABORALES (LOTTT)
+  // ============================================
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESUMEN DE PASIVOS LABORALES ACUMULADOS', 14, 80);
+  
+  // Calcular totales en Bs
+  const totalGarantia = datos.provisiones.garantia_prestaciones * datos.tasa_cambio;
+  const totalIntereses = datos.provisiones.intereses_prestaciones * datos.tasa_cambio;
+  const totalBonoVacacional = datos.provisiones.bono_vacacional * datos.tasa_cambio;
+  const totalUtilidades = datos.provisiones.utilidades * datos.tasa_cambio;
+  const totalPasivos = totalGarantia + totalIntereses + totalBonoVacacional + totalUtilidades;
+  
+  const tablaPasivos = [
+    ['GARANTÍA DE PRESTACIONES SOCIALES (Art. 142 LOTTT)', `${datos.provisiones.garantia_prestaciones.toFixed(2)}`, `Bs. ${totalGarantia.toFixed(2)}`],
+    ['INTERESES SOBRE PRESTACIONES (Art. 143 LOTTT)', `${datos.provisiones.intereses_prestaciones.toFixed(2)}`, `Bs. ${totalIntereses.toFixed(2)}`],
+    ['BONO VACACIONAL (Art. 192 LOTTT)', `${datos.provisiones.bono_vacacional.toFixed(2)}`, `Bs. ${totalBonoVacacional.toFixed(2)}`],
+    ['UTILIDADES FRACCIONADAS (Art. 196 LOTTT)', `${datos.provisiones.utilidades.toFixed(2)}`, `Bs. ${totalUtilidades.toFixed(2)}`],
+    ['TOTAL PASIVOS LABORALES', `${totalPasivos.toFixed(2)}`, `Bs. ${totalPasivos.toFixed(2)}`],
+  ];
+  
+  autoTable(doc, {
+    startY: 85,
+    head: [['CONCEPTO', 'MONTO USD', 'MONTO BS']],
+    body: tablaPasivos,
+    theme: 'striped',
+    headStyles: { fillColor: colorPrimario, textColor: [255, 255, 255] },
+    columnStyles: {
+      0: { cellWidth: 90 },
+      1: { cellWidth: 40, halign: 'right' },
+      2: { cellWidth: 50, halign: 'right' }
+    },
+    footStyles: { fillColor: [51, 51, 51], textColor: [255, 255, 255], fontStyle: 'bold' }
+  });
+  
+  // @ts-ignore
+  let yPos = doc.lastAutoTable?.finalY || 130;
+  
+  // Tasa de cambio utilizada
+  doc.setFontSize(8);
+  doc.setTextColor(128, 128, 128);
+  doc.text(`Tasa de cambio utilizada: Bs. ${datos.tasa_cambio.toFixed(2)} (BCV)`, 14, yPos + 5);
+  
+  // ============================================
+  // PÁGINA 2: LISTADO DE EMPLEADOS
+  // ============================================
+  doc.addPage();
+  
+  doc.setFillColor(...colorPrimario);
+  doc.rect(0, 0, 210, 25, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LISTADO DE EMPLEADOS', 105, 12, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text(`Total: ${datos.empleados.length} empleados`, 105, 20, { align: 'center' });
+  
+  const tablaEmpleados = datos.empleados.map(e => [
+    e.cedula,
+    `${e.apellido || ''} ${e.nombre}`.trim(),
+    e.cargo,
+    e.fecha_ingreso,
+    e.estatus,
+    e.tipo_moneda === 'USD' ? `${e.sueldo_base.toFixed(2)}` : `Bs. ${e.sueldo_base.toFixed(2)}`
+  ]);
+  
+  autoTable(doc, {
+    startY: 30,
+    head: [['Cédula', 'Nombre', 'Cargo', 'Fecha Ingreso', 'Estatus', 'Sueldo Base']],
+    body: tablaEmpleados,
+    theme: 'striped',
+    headStyles: { fillColor: colorPrimario, textColor: [255, 255, 255] },
+    columnStyles: {
+      0: { cellWidth: 25 },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 40 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 25 },
+      5: { cellWidth: 35, halign: 'right' }
+    }
+  });
+  
+  // ============================================
+  // PÁGINA 3: RESUMEN DE NÓMINAS
+  // ============================================
+  doc.addPage();
+  
+  doc.setFillColor(...colorPrimario);
+  doc.rect(0, 0, 210, 25, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESUMEN DE NÓMINAS PROCESADAS', 105, 12, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text(`Total períodos: ${datos.liquidaciones.length}`, 105, 20, { align: 'center' });
+  
+  const nombreMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  
+  const tablaLiquidaciones = datos.liquidaciones.map(l => [
+    `${nombreMes[l.mes - 1]}/${l.ano}`,
+    l.quincena.toString(),
+    `${l.total_asignaciones.toFixed(2)}`,
+    `${l.total_deducciones.toFixed(2)}`,
+    `${l.total_neto.toFixed(2)}`
+  ]);
+  
+  // Totales
+  const totalNeto = datos.liquidaciones.reduce((sum, l) => sum + l.total_neto, 0);
+  const totalAsignaciones = datos.liquidaciones.reduce((sum, l) => sum + l.total_asignaciones, 0);
+  const totalDeducciones = datos.liquidaciones.reduce((sum, l) => sum + l.total_deducciones, 0);
+  
+  tablaLiquidaciones.push([
+    'TOTALES',
+    '',
+    `${totalAsignaciones.toFixed(2)}`,
+    `${totalDeducciones.toFixed(2)}`,
+    `${totalNeto.toFixed(2)}`
+  ]);
+  
+  autoTable(doc, {
+    startY: 30,
+    head: [['Período', 'Qna', 'Asignaciones', 'Deducciones', 'Neto USD']],
+    body: tablaLiquidaciones,
+    theme: 'striped',
+    headStyles: { fillColor: colorPrimario, textColor: [255, 255, 255] },
+    columnStyles: {
+      0: { cellWidth: 30 },
+      1: { cellWidth: 20, halign: 'center' },
+      2: { cellWidth: 50, halign: 'right' },
+      3: { cellWidth: 50, halign: 'right' },
+      4: { cellWidth: 50, halign: 'right' }
+    },
+    footStyles: { fillColor: [51, 51, 51], textColor: [255, 255, 255], fontStyle: 'bold' }
+  });
+  
+  // Pie de página
+  doc.setFontSize(7);
+  doc.setTextColor(128, 128, 128);
+  doc.text('Documento generado por Sistema de Gestión de Nómina Venezuela - LOTTT', 105, 290, { align: 'center' });
+  
+  return doc;
+}
+
 export default {
   generarReciboLiquidacion,
   generarLibroDiario,
   generarAsientoContable,
-  descargarPDF
+  descargarPDF,
+  generarExpedienteFinalPDF
 };

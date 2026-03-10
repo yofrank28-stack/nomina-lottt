@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS empresas (
     lunes_mes INT DEFAULT 4,
     es_inces_contribuyente BOOLEAN DEFAULT FALSE,
     num_empleados INT DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'terminated')),
+    -- Datos de contacto para pagos (cuando status = suspended)
+    admin_master_email VARCHAR(100),
+    admin_master_telefono VARCHAR(20),
+    admin_master_zelle VARCHAR(100),
+    admin_master_pago_movil VARCHAR(100),
+    admin_master_banco VARCHAR(100),
+    admin_master_cuenta VARCHAR(50),
+    -- Datos de terminación
+    fecha_terminacion DATE,
+    expediente_descargado BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
