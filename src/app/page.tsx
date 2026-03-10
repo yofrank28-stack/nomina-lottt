@@ -1369,6 +1369,7 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
 // ============================================================
 function NominaView({ empresaId }: { empresaId?: number | null }) {
   const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
+  const router = useRouter();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
@@ -1383,6 +1384,24 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   // Usar empresaId si está seleccionado, o la primera empresa permitida
   const empresaDefault = empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState<number>(empresaDefault);
+
+  // Obtener la empresa seleccionada para verificar su estatus
+  const empresaActual = empresas.find(e => e.id === empresaSeleccionada);
+  const estatusEmpresa = empresaActual?.status || 'active';
+
+  // ============================================================
+  // BLOQUEO POR ESTATUS DE EMPRESA
+  // ============================================================
+  
+  // Si la empresa está SUSPENDIDA - redirigir al muro de pago
+  useEffect(() => {
+    if (estatusEmpresa === 'suspended') {
+      router.push('/service-suspended');
+    }
+  }, [estatusEmpresa, router]);
+
+  // Si la empresa está TERMINADA - modo solo lectura
+  const esEmpresaTerminada = estatusEmpresa === 'terminated';
 
   // Filtrar empleados activos por empresa seleccionada (aislamiento multi-tenant)
   const empleadosActivos = empleados.filter(e => {
@@ -1521,6 +1540,19 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
 
   return (
     <div className="space-y-6">
+      {/* Banner de solo lectura para empresas terminadas */}
+      {esEmpresaTerminada && (
+        <div className="bg-amber-900/30 border border-amber-600 rounded-lg p-4 flex items-center gap-3">
+          <svg className="w-6 h-6 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <p className="text-amber-400 font-semibold">Nómina histórica en modo lectura (Empresa Terminada)</p>
+            <p className="text-amber-300/70 text-sm">Los datos se muestran con fines de consulta únicamente. No se pueden realizar nuevos cálculos.</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Procesar Nómina</h2>
@@ -1560,8 +1592,8 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <select
               value={empresaSeleccionada}
               onChange={(e) => setEmpresaSeleccionada(parseInt(e.target.value))}
-              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[200px]"
-              disabled={!puedeVerTodasEmpresas() && empresasPermitidas.length === 1}
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[200px] disabled:opacity-50"
+              disabled={esEmpresaTerminada || (!puedeVerTodasEmpresas() && empresasPermitidas.length === 1)}
             >
               {empresasPermitidasList.map(e => (
                 <option key={e.id} value={e.id}>{e.nombre}</option>
@@ -1574,7 +1606,8 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <select
               value={quincena}
               onChange={(e) => setQuincena(parseInt(e.target.value))}
-              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white disabled:opacity-50"
+              disabled={esEmpresaTerminada}
             >
               <option value={1}>1ra Quincena (1-15)</option>
               <option value={2}>2da Quincena (16-30)</option>
@@ -1586,7 +1619,8 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <select
               value={tipoConcepto}
               onChange={(e) => setTipoConcepto(e.target.value as any)}
-              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+              className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white disabled:opacity-50"
+              disabled={esEmpresaTerminada}
             >
               <option value="NOMINA">Nómina Ordinaria</option>
               <option value="UTILIDADES">Utilidades</option>
@@ -1595,13 +1629,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           </div>
 
           {tipoConcepto === 'NOMINA' && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-neutral-700 rounded-lg">
+            <div className={`flex items-center gap-2 px-4 py-2 bg-neutral-700 rounded-lg ${esEmpresaTerminada ? 'opacity-50' : ''}`}>
               <input
                 type="checkbox"
                 id="bonoVacacional"
                 checked={pagarBonoVacacional}
                 onChange={(e) => setPagarBonoVacacional(e.target.checked)}
                 className="w-4 h-4"
+                disabled={esEmpresaTerminada}
               />
               <label htmlFor="bonoVacacional" className="text-sm text-neutral-300">
                 PAGAR BONO VACACIONAL
@@ -1612,8 +1647,9 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           <div className="flex items-end gap-2">
             <button
               onClick={procesarNomina}
-              disabled={procesando}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+              disabled={procesando || esEmpresaTerminada}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title={esEmpresaTerminada ? "Empresa terminada - Solo lectura" : ""}
             >
               <Calculator className="w-4 h-4" />
               {procesando ? "Procesando..." : "Procesar Nómina"}
