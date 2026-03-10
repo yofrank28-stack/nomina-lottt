@@ -34,6 +34,7 @@ export interface Empresa {
   admin_master_email?: string;
   admin_master_telefono?: string;
   admin_master_zelle?: string;
+  admin_master_zinli?: string;
   admin_master_pago_movil?: string;
   admin_master_banco?: string;
   admin_master_cuenta?: string;
@@ -336,7 +337,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false, status: 'active' },
           { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'active' },
           { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'suspended', 
-            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com',
+            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com', admin_master_zinli: 'admin@zinli.com',
             admin_master_pago_movil: '0412-1234567', admin_master_banco: 'Banco de Venezuela', admin_master_cuenta: '0102-1234-5678-9012' },
           { id: 4, rif: 'J-55555555-5', nombre: 'Empresa Terminada C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'terminated', 
             fecha_terminacion: '2024-12-31', expediente_descargado: false }
@@ -384,7 +385,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           { id: 1, rif: 'J-00000000-0', nombre: 'ADMINISTRACIÓN MAESTRA', lunes_mes: 4, es_inces_contribuyente: false, status: 'active' },
           { id: 2, rif: 'J-12345678-9', nombre: 'Corporación Ejemplo C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'active' },
           { id: 3, rif: 'J-98765432-1', nombre: 'Inversiones X, C.A.', lunes_mes: 4, es_inces_contribuyente: true, status: 'suspended',
-            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com',
+            admin_master_email: 'admin@master.com', admin_master_telefono: '+58 412-1234567', admin_master_zelle: 'admin@zelle.com', admin_master_zinli: 'admin@zinli.com',
             admin_master_pago_movil: '0412-1234567', admin_master_banco: 'Banco de Venezuela', admin_master_cuenta: '0102-1234-5678-9012' }
         ];
         

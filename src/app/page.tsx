@@ -524,6 +524,7 @@ function EmpresasView() {
     admin_master_email: "",
     admin_master_telefono: "",
     admin_master_zelle: "",
+    admin_master_zinli: "",
     admin_master_pago_movil: "",
     admin_master_banco: "",
     admin_master_cuenta: ""
@@ -551,6 +552,7 @@ function EmpresasView() {
       admin_master_email: "",
       admin_master_telefono: "",
       admin_master_zelle: "",
+      admin_master_zinli: "",
       admin_master_pago_movil: "",
       admin_master_banco: "",
       admin_master_cuenta: ""
@@ -569,6 +571,7 @@ function EmpresasView() {
       admin_master_email: empresa.admin_master_email || "",
       admin_master_telefono: empresa.admin_master_telefono || "",
       admin_master_zelle: empresa.admin_master_zelle || "",
+      admin_master_zinli: empresa.admin_master_zinli || "",
       admin_master_pago_movil: empresa.admin_master_pago_movil || "",
       admin_master_banco: empresa.admin_master_banco || "",
       admin_master_cuenta: empresa.admin_master_cuenta || ""
@@ -591,6 +594,7 @@ function EmpresasView() {
       admin_master_email: "",
       admin_master_telefono: "",
       admin_master_zelle: "",
+      admin_master_zinli: "",
       admin_master_pago_movil: "",
       admin_master_banco: "",
       admin_master_cuenta: ""
@@ -714,6 +718,16 @@ function EmpresasView() {
                 onChange={(e) => setFormData({ ...formData, admin_master_telefono: e.target.value })}
                 className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
                 placeholder="+58 412-1234567"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">Zinli</label>
+              <input
+                type="text"
+                value={formData.admin_master_zinli}
+                onChange={(e) => setFormData({ ...formData, admin_master_zinli: e.target.value })}
+                className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                placeholder="admin@zinli.com"
               />
             </div>
             <div>

@@ -22,13 +22,15 @@ import {
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "";
 const ADMIN_TELEFONO = process.env.NEXT_PUBLIC_ADMIN_TELEFONO || "";
 const ADMIN_ZELLE = process.env.NEXT_PUBLIC_ADMIN_ZELLE || "";
+const ADMIN_ZINLI = process.env.NEXT_PUBLIC_ADMIN_ZINLI || "";
 const ADMIN_PAGO_MOVIL = process.env.NEXT_PUBLIC_ADMIN_PAGO_MOVIL || "";
 const ADMIN_BANCO = process.env.NEXT_PUBLIC_ADMIN_BANCO || "";
 const ADMIN_CUENTA = process.env.NEXT_PUBLIC_ADMIN_CUENTA || "";
 const ADMIN_WHATSAPP = process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || "";
 const MENSAJE_SUSPENDIDO = process.env.NEXT_PUBLIC_MENSAJE_SUSPENDIDO || "Su suscripción ha vencido o el servicio ha sido pausado por el administrador.";
 
-const HAY_DATOS_PAGO = !!(ADMIN_ZELLE || ADMIN_PAGO_MOVIL || ADMIN_BANCO);
+// Zinli tiene prioridad sobre Zelle
+const HAY_DATOS_PAGO = !!(ADMIN_ZINLI || ADMIN_ZELLE || ADMIN_PAGO_MOVIL || ADMIN_BANCO);
 
 export default function ServiceSuspendedPage() {
   const router = useRouter();
@@ -249,10 +251,18 @@ export default function ServiceSuspendedPage() {
                   <div className="bg-neutral-700/50 rounded-xl p-6 border border-neutral-600">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                       <CreditCard className="w-5 h-5 text-green-400" />
-                      Métodos de Pago para Renovación
+                      {ADMIN_ZINLI ? 'Pago vía Zinli' : 'Métodos de Pago para Renovación'}
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Zinli - PRIORIZADO */}
+                      {ADMIN_ZINLI && (
+                        <div className="bg-neutral-800 p-4 rounded-lg border border-green-500/50">
+                          <p className="text-sm text-green-400 mb-1">Zinli</p>
+                          <p className="text-white font-medium">{ADMIN_ZINLI}</p>
+                        </div>
+                      )}
+
                       {/* Zelle */}
                       {ADMIN_ZELLE && (
                         <div className="bg-neutral-800 p-4 rounded-lg border border-neutral-600">

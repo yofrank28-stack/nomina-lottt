@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS empresas (
     admin_master_email VARCHAR(100),
     admin_master_telefono VARCHAR(20),
     admin_master_zelle VARCHAR(100),
+    admin_master_zinli VARCHAR(100),
     admin_master_pago_movil VARCHAR(100),
     admin_master_banco VARCHAR(100),
     admin_master_cuenta VARCHAR(50),
