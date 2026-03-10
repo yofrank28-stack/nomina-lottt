@@ -14,6 +14,8 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] ESLint configuration
 - [x] Memory bank documentation
 - [x] Recipe system for common features
+- [x] Force Webpack: Disable Turbopack for CPU compatibility
+- [x] Fix: Restore standard Next.js config, use port 8080 for Kilo compatibility
 
 ## Current Structure
 
