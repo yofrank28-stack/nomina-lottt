@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Force Webpack and explicitly disable Turbopack for CPU compatibility
+  turbopack: false,
 };
 
 export default nextConfig;
