@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "taskkill //F //IM node.exe || true && next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
