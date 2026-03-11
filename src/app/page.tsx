@@ -1457,7 +1457,7 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
 // VISTA: NÓMINA
 // ============================================================
 function NominaView({ empresaId }: { empresaId?: number | null }) {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada, addToLoteEspera, clearLoteEspera, processLoteCompleto, loteEspera } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada, addToLoteEspera, updateInLoteEspera, removeFromLoteEspera, generateBatchFromCompany, clearLoteEspera, processLoteCompleto, loteEspera } = useAppStore();
   const router = useRouter();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
@@ -1510,7 +1510,16 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     setEmpresaSeleccionadaLocal(nuevaEmpresa);
     setEmpleadoSeleccionadoId(null);
     setLiquidaciones([]);
+    // Generar lote automático con todos los empleados de la empresa
+    generateBatchFromCompany(nuevaEmpresa, empleados, empresas, parametros, tasaCambio);
   };
+
+  // Efecto para generar lote automático cuando cambia la empresa
+  useEffect(() => {
+    if (empresaSeleccionada && empresaSeleccionada > 0) {
+      generateBatchFromCompany(empresaSeleccionada, empleados, empresas, parametros, tasaCambio);
+    }
+  }, [empresaSeleccionada]);
 
   // Obtener empleados filtrados por la empresa seleccionada
   const empleadosPorEmpresa = empleados.filter(e => {
@@ -1520,6 +1529,18 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
 
   // Obtener el empleado seleccionado para mostrar su sueldo base
   const empleadoSeleccionado = empleadoSeleccionadoId ? empleados.find(e => e.id === empleadoSeleccionadoId) : null;
+
+  // Obtener datos del lote para el empleado seleccionado (si existe)
+  const empleadoEnLote = empleadoSeleccionadoId 
+    ? loteEspera.find(l => l.empleado_id === empleadoSeleccionadoId) 
+    : null;
+
+  // Cargar datos del lote cuando se selecciona un empleado
+  useEffect(() => {
+    if (empleadoEnLote && empleadoSeleccionadoId) {
+      // Los datos ya están calculados en el lote, se muestran en la tabla de resumen
+    }
+  }, [empleadoSeleccionadoId, empleadoEnLote]);
 
   // Obtener la empresa seleccionada para verificar su estatus
   const empresaActual = empresas.find(e => e.id === empresaSeleccionada);
@@ -1638,16 +1659,22 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     });
 
     if (guardarEnLote) {
-      // Guardar cada empleado en el lote de espera
+      // Guardar cada empleado en el lote de espera (actualiza si ya existe)
       nuevasLiquidaciones.forEach((liquidacion, index) => {
         const emp = empleadosAProcesar[index];
-        addToLoteEspera({
-          empleado_id: emp.id,
-          empleado_nombre: `${emp.nombre} ${emp.apellido || ''}`,
-          empleado_cedula: emp.cedula,
-          liquidacion,
-          fecha_agregado: new Date().toISOString()
-        });
+        if (empleadoSeleccionadoId) {
+          // Si se editsó un empleado específico, actualizar en lote
+          updateInLoteEspera(emp.id, liquidacion);
+        } else {
+          // Agregar normalmente
+          addToLoteEspera({
+            empleado_id: emp.id,
+            empleado_nombre: `${emp.nombre} ${emp.apellido || ''}`,
+            empleado_cedula: emp.cedula,
+            liquidacion,
+            fecha_agregado: new Date().toISOString()
+          });
+        }
       });
       setSuccessMessage(`Empleado(s) guardado(s) en lote. Total en espera: ${loteEspera.length + nuevasLiquidaciones.length}`);
     } else {
@@ -1663,13 +1690,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       setError("ERROR: Debe seleccionar una empresa");
       return;
     }
-    if (empleadosPorEmpresa.length === 0) {
-      setError("ERROR: Esta empresa no tiene personal registrado");
+    if (loteEspera.length === 0) {
+      // Si no hay lote, generar uno nuevo
+      generateBatchFromCompany(empresaSeleccionada, empleados, empresas, parametros, tasaCambio);
+      setSuccessMessage("Lote generado automáticamente con todos los empleados");
       return;
     }
-    
-    // Forzar procesamiento de todos los empleados
-    await procesarNomina(true);
+    // Si ya hay lote, simplemente mostrar el mensaje
+    setSuccessMessage(`Lote listo con ${loteEspera.length} empleado(s)`);
   };
 
   // Procesar nómina general (guardar todos los del lote al historial)
@@ -1685,7 +1713,17 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     const liquidacionesLote = processLoteCompleto();
     setLiquidaciones(liquidacionesLote);
     setSuccessMessage(`Nómina general procesada: ${liquidacionesLote.length} empleado(s) guardado(s) en el historial`);
+    
+    // Regenerar lote para el siguiente período
+    generateBatchFromCompany(empresaSeleccionada, empleados, empresas, parametros, tasaCambio);
     setProcesando(false);
+  };
+
+  // Limpiar lote y regenerar con datos base
+  const handleClearLote = () => {
+    clearLoteEspera();
+    generateBatchFromCompany(empresaSeleccionada, empleados, empresas, parametros, tasaCambio);
+    setSuccessMessage("Lote limpiado y regenerado con datos base");
   };
 
   // Calcular totales del lote
@@ -2043,19 +2081,29 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                       }
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => {
-                          const updated = loteEspera.filter(l => l.empleado_id !== item.empleado_id);
-                          // Clear and re-add without this employee
-                          clearLoteEspera();
-                          updated.forEach(l => addToLoteEspera(l));
-                          setSuccessMessage("Empleado removido del lote");
-                        }}
-                        className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white"
-                        title="Remover del lote"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => {
+                            // Seleccionar empleado para editar
+                            setEmpleadoSeleccionadoId(item.empleado_id);
+                            setSuccessMessage(`Editando: ${item.empleado_nombre}. Modifique asignaciones/deducciones y guarde en lote.`);
+                          }}
+                          className="p-1 hover:bg-blue-600 rounded text-neutral-400 hover:text-white"
+                          title="Editar empleado"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            removeFromLoteEspera(item.empleado_id);
+                            setSuccessMessage("Empleado removido del lote");
+                          }}
+                          className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white"
+                          title="Remover del lote"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

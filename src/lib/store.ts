@@ -205,6 +205,9 @@ interface AppState {
   // Batch processing (Lote de espera)
   loteEspera: LoteEspera[];
   addToLoteEspera: (item: LoteEspera) => void;
+  updateInLoteEspera: (empleadoId: number, liquidacion: Liquidacion) => void;
+  removeFromLoteEspera: (empleadoId: number) => void;
+  generateBatchFromCompany: (empresaId: number, empleados: Empleado[], empresas: Empresa[], parametros: Parametros, tasaCambio: number) => void;
   clearLoteEspera: () => void;
   processLoteCompleto: () => Liquidacion[];
   
@@ -479,6 +482,115 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Agregar nuevo
       set({ loteEspera: [...loteEspera, item] });
     }
+  },
+  
+  // Actualizar un empleado específico en el lote (para edición)
+  updateInLoteEspera: (empleadoId, liquidacion) => {
+    const { loteEspera, empleados } = get();
+    const emp = empleados.find(e => e.id === empleadoId);
+    if (!emp) return;
+    
+    const updated = loteEspera.map(l => 
+      l.empleado_id === empleadoId 
+        ? { ...l, liquidacion, fecha_agregado: new Date().toISOString() } 
+        : l
+    );
+    set({ loteEspera: updated });
+  },
+  
+  // Eliminar un empleado del lote
+  removeFromLoteEspera: (empleadoId) => {
+    const { loteEspera } = get();
+    set({ loteEspera: loteEspera.filter(l => l.empleado_id !== empleadoId) });
+  },
+  
+  // Generar lote completo desde empresa (procesamiento híbrido automático)
+  generateBatchFromCompany: (empresaId, empleados, empresas, parametros, tasaCambio) => {
+    const empresa = empresas.find(e => e.id === empresaId);
+    if (!empresa) return;
+    
+    const empleadosEmpresa = empleados.filter(e => 
+      e.empresa_id === empresaId && e.estatus === 'ACTIVO'
+    );
+    
+    if (empleadosEmpresa.length === 0) {
+      set({ loteEspera: [] });
+      return;
+    }
+    
+    const hoy = new Date();
+    const ano = hoy.getFullYear();
+    const mes = hoy.getMonth() + 1;
+    const lunes = empresa.lunes_mes || 4;
+    const dias = 15;
+    
+    // Generar liquidación base para cada empleado
+    const lote: LoteEspera[] = empleadosEmpresa.map(emp => {
+      const sueldoBaseUSD = emp.tipo_moneda_sueldo === "USD" 
+        ? emp.sueldo_base 
+        : emp.sueldo_base / tasaCambio;
+      
+      // Cal días trabajados
+      const fechaIngreso = new Date(emp.fecha_ingreso);
+      const diasTotalesMes = new Date(ano, mes, 0).getDate();
+      const diasDesdeIngreso = Math.min(dias, Math.max(0, diasTotalesMes - fechaIngreso.getDate() + 1));
+      const diasLaborados = Math.min(dias, Math.max(0, dias));
+      
+      // Prestaciones sociales (antigüedad)
+      const anosAntiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      const factorAntiguedad = Math.min(anosAntiguedad * 0.02, 0.30);
+      const utilidad = Math.max(0, (sueldoBaseUSD * dias / 30) * 0.15);
+      const bonoVacacional = Math.max(0, (sueldoBaseUSD * dias / 30) * (0.15 + (emp.tiene_hijos ? 0.05 : 0)));
+      
+      // Deducciones
+      const ivss = Math.min(sueldoBaseUSD * 0.04, parametros.salario_minimo * 0.04);
+      const rpe = Math.min(sueldoBaseUSD * 0.005, parametros.salario_minimo * 0.005);
+      const faov = sueldoBaseUSD * 0.01;
+      const inces = empresa.es_inces_contribuyente && empleadosEmpresa.length >= 5 ? utilidad * 0.02 : 0;
+      
+      const totalAsignaciones = utilidad + bonoVacacional + parametros.bono_transporte + parametros.cesta_ticket;
+      const totalDeducciones = ivss + rpe + faov + inces;
+      const netoPagar = totalAsignaciones - totalDeducciones;
+      
+      const liquidacion: Liquidacion = {
+        empleado_id: emp.id,
+        empresa_id: empresaId,
+        periodo: `${ano}-${String(mes).padStart(2, '0')}-15`,
+        ano,
+        mes,
+        quincena: 1,
+        dias_trabajados: diasLaborados,
+        lunes_periodo: lunes,
+        sueldo_base: sueldoBaseUSD,
+        bono_vacacional: bonoVacacional,
+        utilidades: utilidad,
+        otras_asignaciones: parametros.bono_transporte + parametros.cesta_ticket,
+        total_asignaciones: totalAsignaciones,
+        ivss_trabajador: ivss,
+        rpe_trabajador: rpe,
+        faov_trabajador: faov,
+        inces_trabajador: inces,
+        inces_patronal: inces,
+        otras_deducciones: 0,
+        total_deducciones: totalDeducciones,
+        neto_pagar: netoPagar,
+        tipo_cambio_usd: tasaCambio,
+        monto_bs: netoPagar * tasaCambio,
+        fecha_liquidacion: new Date().toISOString(),
+        conceptos_asignaciones: [],
+        conceptos_deducciones: []
+      };
+      
+      return {
+        empleado_id: emp.id,
+        empleado_nombre: `${emp.nombre} ${emp.apellido || ''}`,
+        empleado_cedula: emp.cedula,
+        liquidacion,
+        fecha_agregado: new Date().toISOString()
+      };
+    });
+    
+    set({ loteEspera: lote });
   },
   
   clearLoteEspera: () => {
