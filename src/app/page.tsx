@@ -1542,6 +1542,37 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   // Filtrar empleados activos por empresa seleccionada
   const empleadosActivos = empleadosPorEmpresa.filter(e => e.estatus === 'ACTIVO');
 
+  // Función para guardar liquidación en base de datos (simulada con localStorage)
+  const guardarLiquidacionDB = (liquidacion: Liquidacion): boolean => {
+    try {
+      // Obtener historial existente
+      const historialExistente = localStorage.getItem('historico_liquidaciones');
+      const historial: Liquidacion[] = historialExistente ? JSON.parse(historialExistente) : [];
+      
+      // Agregar nueva liquidación
+      historial.push({
+        ...liquidacion,
+        id: historial.length + 1,
+        fecha_liquidacion: new Date().toISOString()
+      });
+      
+      // Guardar en localStorage
+      localStorage.setItem('historico_liquidaciones', JSON.stringify(historial));
+      return true;
+    } catch (error) {
+      console.error('Error guardando liquidación:', error);
+      return false;
+    }
+  };
+
+  // Función para resetear el formulario después de procesar
+  const resetearFormularioNomina = () => {
+    setEmpleadoSeleccionadoId(null);
+    setConceptosAsignaciones([]);
+    setConceptosDeducciones([]);
+    setLiquidaciones([]);
+  };
+
   const procesarNomina = async () => {
     // Validar que hay una empresa seleccionada
     if (!empresaSeleccionada) {
@@ -1631,8 +1662,33 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       };
     });
 
+    // Guardar cada liquidación en la base de datos (simulada)
+    let guardadosExitosamente = 0;
+    let nombreEmpleadoProcesado = '';
+    
+    for (const liquidacion of nuevasLiquidaciones) {
+      if (guardarLiquidacionDB(liquidacion)) {
+        guardadosExitosamente++;
+        // Obtener nombre del empleado
+        const emp = empleados.find(e => e.id === liquidacion.empleado_id);
+        if (emp) {
+          nombreEmpleadoProcesado = `${emp.nombre} ${emp.apellido || ''}`.trim();
+        }
+      }
+    }
+
     setLiquidaciones(nuevasLiquidaciones);
-    setSuccessMessage("Nómina procesada correctamente");
+    
+    // Resetear el formulario después de procesar
+    resetearFormularioNomina();
+    
+    // Mostrar mensaje de éxito personalizado
+    if (empleadoSeleccionadoId && nombreEmpleadoProcesado) {
+      setSuccessMessage(`✓ Nómina procesada con éxito para ${nombreEmpleadoProcesado}`);
+    } else {
+      setSuccessMessage(`✓ Nómina procesada correctamente - ${guardadosExitosamente} registro(s) guardado(s) en el historial`);
+    }
+    
     setProcesando(false);
   };
 
