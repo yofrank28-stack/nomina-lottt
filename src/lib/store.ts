@@ -592,6 +592,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   
   // Generar lote completo desde empresa (procesamiento híbrido automático)
+  // CORREGIDO: Fórmula correcta de Asignaciones = (Sueldo Base / 30 * Días) + Bono Vacacional + Utilidades + Asignaciones Manuales
   generateBatchFromCompany: (empresaId, empleados, empresas, parametros, tasaCambio) => {
     const empresa = empresas.find(e => e.id === empresaId);
     if (!empresa) return;
@@ -609,35 +610,94 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ano = hoy.getFullYear();
     const mes = hoy.getMonth() + 1;
     const lunes = empresa.lunes_mes || 4;
-    const dias = 15;
+    const diasQuincena = 15;
+    const diasMes = new Date(ano, mes, 0).getDate(); // Días totales del mes
     
     // Generar liquidación base para cada empleado
     const lote: LoteEspera[] = empleadosEmpresa.map(emp => {
-      const sueldoBaseUSD = emp.tipo_moneda_sueldo === "USD" 
-        ? emp.sueldo_base 
-        : emp.sueldo_base / tasaCambio;
+      // Convertir sueldo a USD si está en VES
+      const sueldoBaseUSD = emp.tipo_moneda_sueldo === 'VES' 
+        ? emp.sueldo_base / tasaCambio 
+        : emp.sueldo_base;
       
-      // Cal días trabajados
+      // === PRORRATEO POR FECHA DE INGRESO ===
       const fechaIngreso = new Date(emp.fecha_ingreso);
-      const diasTotalesMes = new Date(ano, mes, 0).getDate();
-      const diasDesdeIngreso = Math.min(dias, Math.max(0, diasTotalesMes - fechaIngreso.getDate() + 1));
-      const diasLaborados = Math.min(dias, Math.max(0, dias));
+      const inicioMes = new Date(ano, mes - 1, 1);
+      const finMes = new Date(ano, mes - 1, diasMes);
       
-      // Prestaciones sociales (antigüedad)
+      // Calcular días trabajados en el mes según fecha de ingreso
+      let diasLaborados: number;
+      if (fechaIngreso <= inicioMes) {
+        // Trabajó todo el mes
+        diasLaborados = diasQuincena;
+      } else if (fechaIngreso <= finMes) {
+        // Ingressó durante el mes - calcular días desde ingreso hasta fin de quincena
+        const diasDesdeIngreso = Math.min(diasQuincena, Math.max(0, diasQuincena - (fechaIngreso.getDate() - 1)));
+        diasLaborados = Math.max(0, diasDesdeIngreso);
+      } else {
+        // No trabajó en el período
+        diasLaborados = 0;
+      }
+      
+      // Calcular antigüedad
       const anosAntiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      const factorAntiguedad = Math.min(anosAntiguedad * 0.02, 0.30);
-      const utilidad = Math.max(0, (sueldoBaseUSD * dias / 30) * 0.15);
-      const bonoVacacional = Math.max(0, (sueldoBaseUSD * dias / 30) * (0.15 + (emp.tiene_hijos ? 0.05 : 0)));
       
-      // Deducciones
-      const ivss = Math.min(sueldoBaseUSD * 0.04, parametros.salario_minimo * 0.04);
-      const rpe = Math.min(sueldoBaseUSD * 0.005, parametros.salario_minimo * 0.005);
-      const faov = sueldoBaseUSD * 0.01;
-      const inces = empresa.es_inces_contribuyente && empleadosEmpresa.length >= 5 ? utilidad * 0.02 : 0;
+      // === FÓRMULA CORREGIDA: SUELDO DEL PERÍODO ===
+      // Sueldo Base / 30 * Días Trabajados
+      const sueldoPeriodo = (sueldoBaseUSD / 30) * diasLaborados;
       
-      const totalAsignaciones = utilidad + bonoVacacional + parametros.bono_transporte + parametros.cesta_ticket;
-      const totalDeducciones = ivss + rpe + faov + inces;
-      const netoPagar = totalAsignaciones - totalDeducciones;
+      // === BENEFICIOS INDIVIDUALES ===
+      // Solo si el empleado tiene el flag individual habilitado
+      const tieneBonoVacacional = emp.pagar_bono_vacacional === true;
+      const tieneUtilidades = emp.pagar_utilidades === true;
+      
+      // Bono Vacacional: Solo si está habilitado y tiene antigüedad
+      let bonoVacacional = 0;
+      if (tieneBonoVacacional && anosAntiguedad >= 1) {
+        // 1.25 días por mes trabajado
+        const mesesTrabajados = (ano - fechaIngreso.getFullYear()) * 12 + (mes - fechaIngreso.getMonth() - 1);
+        const diasVacaciones = Math.max(0, Math.min(mesesTrabajados * 1.25, 15)); // Máximo 15 días
+        const sueldoDiario = (sueldoBaseUSD * 12) / 360;
+        bonoVacacional = Math.round(sueldoDiario * diasVacaciones * 100) / 100;
+      }
+      
+      // Utilidades: Solo si está habilitado
+      let utilidad = 0;
+      if (tieneUtilidades) {
+        // 15% del salario por día trabajado
+        utilidad = Math.round((sueldoBaseUSD / 30 * diasLaborados) * 0.15 * 100) / 100;
+      }
+      
+      // Bono Transporte y Cesta Ticket (solo en 2da quincena - aquí es 1ra)
+      const bonoTransporte = 0; // Solo 2da quincena
+      const cestaTicket = 0; // Solo 2da quincena
+      
+      // === TOTAL ASIGNACIONES ===
+      // CORREGIDO: Incluir SUELDO DEL PERÍODO
+      const totalAsignaciones = Math.round((sueldoPeriodo + bonoVacacional + utilidad + bonoTransporte + cestaTicket) * 100) / 100;
+      
+      // === DEDUCCIONES ===
+      // IVSS (4%): cálculo semanal
+      const semanal = (sueldoBaseUSD * 12) / 52;
+      const topeSemanal = (parametros.salario_minimo * 5 * 12) / 52;
+      const baseCalculo = Math.min(semanal, topeSemanal);
+      const ivss = Math.round(baseCalculo * 0.04 * lunes * 100) / 100;
+      
+      // RPE (0.5%)
+      const rpe = Math.round(baseCalculo * 0.005 * lunes * 100) / 100;
+      
+      // FAOV (1%)
+      const faov = Math.round(sueldoBaseUSD * 0.01 * 100) / 100;
+      
+      // INCES (2% only if >= 5 employees)
+      const inces = empresa.es_inces_contribuyente && empleadosEmpresa.length >= 5 
+        ? Math.round(baseCalculo * 0.02 * lunes * 100) / 100 
+        : 0;
+      
+      const totalDeducciones = Math.round((ivss + rpe + faov + inces) * 100) / 100;
+      
+      // === NETO A PAGAR ===
+      const netoPagar = Math.round((totalAsignaciones - totalDeducciones) * 100) / 100;
       
       const liquidacion: Liquidacion = {
         empleado_id: emp.id,
@@ -648,21 +708,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         quincena: 1,
         dias_trabajados: diasLaborados,
         lunes_periodo: lunes,
-        sueldo_base: sueldoBaseUSD,
+        sueldo_base: Math.round(sueldoBaseUSD * 100) / 100,
         bono_vacacional: bonoVacacional,
         utilidades: utilidad,
-        otras_asignaciones: parametros.bono_transporte + parametros.cesta_ticket,
+        otras_asignaciones: bonoTransporte + cestaTicket,
         total_asignaciones: totalAsignaciones,
         ivss_trabajador: ivss,
         rpe_trabajador: rpe,
         faov_trabajador: faov,
-        inces_trabajador: inces,
+        inces_trabajador: 0, // Solo en utilidades/aguinaldos
         inces_patronal: inces,
         otras_deducciones: 0,
         total_deducciones: totalDeducciones,
         neto_pagar: netoPagar,
         tipo_cambio_usd: tasaCambio,
-        monto_bs: netoPagar * tasaCambio,
+        monto_bs: Math.round(netoPagar * tasaCambio * 100) / 100,
         fecha_liquidacion: new Date().toISOString(),
         conceptos_asignaciones: [],
         conceptos_deducciones: []
