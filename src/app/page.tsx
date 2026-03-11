@@ -1625,7 +1625,31 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     const nuevasLiquidaciones: Liquidacion[] = empleadosAProcesar.map(emp => {
       const empresa = empresas.find(e => e.id === emp.empresa_id);
       const lunes = empresa?.lunes_mes || 4;
-      const dias = quincena === 1 ? 15 : 15;
+      const diasQuincena = 15;
+      
+      // === PRORRATEO POR FECHA DE INGRESO ===
+      // Calcular días trabajados según fecha de ingreso
+      const hoy = new Date();
+      const ano = hoy.getFullYear();
+      const mes = hoy.getMonth() + 1;
+      const fechaIngreso = new Date(emp.fecha_ingreso);
+      const inicioPeriodo = new Date(ano, mes - 1, 1);
+      const finPeriodo = new Date(ano, mes - 1, diasQuincena);
+      
+      let diasLaborados: number;
+      if (fechaIngreso <= inicioPeriodo) {
+        // Trabajó todo el período
+        diasLaborados = diasQuincena;
+      } else if (fechaIngreso <= finPeriodo) {
+        // Ingresó durante el período - calcular días desde ingreso
+        const diasDesdeIngreso = Math.min(diasQuincena, Math.max(0, diasQuincena - (fechaIngreso.getDate() - 1)));
+        diasLaborados = Math.max(0, diasDesdeIngreso);
+      } else {
+        // No trabajó en el período
+        diasLaborados = 0;
+      }
+      
+      const dias = diasLaborados;
       const sueldoBaseUSD = emp.tipo_moneda_sueldo === "USD" ? emp.sueldo_base : emp.sueldo_base / tasaCambio;
       
       const adicionalesAsignaciones = calcularTotalConceptosAsignaciones(sueldoBaseUSD);
