@@ -684,7 +684,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? totalSueldoBase * 0.02 
       : 0; // 2% INCES
     
+    // Total de aportes patronales (para el DEBE como gasto)
+    const totalAportesPatronales = ivssPatronal + faovPatronal + spfPatronal + incesPatronal;
+    
     // Generar el asiento contable
+    // DEBE: Gastos (Sueldos + Aportes Patronales + Provisiones)
+    // HABER: Acreedores (Neto a Pagar + Retenciones + Aportes Patronales por Pagar)
     const asiento: AsientoContable = {
       id: `ASiento-${Date.now()}`,
       empresa_id: primeraLiquidacion.empresa_id,
@@ -694,14 +699,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       mes: primeraLiquidacion.mes,
       quincena: primeraLiquidacion.quincena,
       fecha_generacion: new Date().toISOString(),
-      // DEBE: Gastos
+      // DEBE: Gastos = Sueldo Base + Aportes Patronales + Provisiones
       gasto_sueldos: totalSueldoBase,
       gasto_prestaciones: garantiaPrestaciones,
       gasto_intereses: interesesPrestaciones,
       gasto_utilidades: aliCuotaUtilidades,
       gasto_bono_vacacional: aliCuotaBonoVacacional,
-      total_debe: totalSueldoBase + garantiaPrestaciones + interesesPrestaciones + aliCuotaUtilidades + aliCuotaBonoVacacional,
-      // HABER: Acreedores
+      total_debe: totalSueldoBase + totalAportesPatronales + garantiaPrestaciones + interesesPrestaciones + aliCuotaUtilidades + aliCuotaBonoVacacional,
+      // HABER: Neto a Pagar + Retenciones (IVSS trab, FAOV trab) + Aportes Patronales por Pagar
+      // NOTA: RPE, INCES Trabajador NO van al recibo, solo al asiento
       neto_pagar_banco: totalNetoPagar,
       ivss_trabajador_por_pagar: totalIvssTrabajador,
       ivss_patronal_por_pagar: ivssPatronal,
@@ -710,7 +716,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       spf_por_pagar: spfPatronal,
       inces_por_pagar: incesPatronal,
       aportes_especiales_por_pagar: aportesEspeciales,
-      total_haber: totalNetoPagar + totalIvssTrabajador + ivssPatronal + totalFaovTrabajador + faovPatronal + spfPatronal + incesPatronal + aportesEspeciales,
+      total_haber: totalNetoPagar + totalIvssTrabajador + totalFaovTrabajador + ivssPatronal + faovPatronal + spfPatronal + incesPatronal + aportesEspeciales,
       // Detalle por empleado
       empleados: loteEspera.map(l => ({
         empleado_id: l.empleado_id,

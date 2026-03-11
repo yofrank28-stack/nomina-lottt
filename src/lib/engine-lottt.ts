@@ -18,6 +18,8 @@ export interface ParametrosNomina {
   tipoConcepto?: 'NOMINA' | 'UTILIDADES' | 'AGUINALDOS';
   /** Si se debe pagar bono vacacional en esta liquidación */
   pagarBonoVacacional?: boolean;
+  /** Si se debe pagar utilidades en esta liquidación */
+  pagarUtilidades?: boolean;
   /** Bono de transporte - se paga en 2da quincena */
   bonoTransporte?: number;
   /** Cesta ticket - se paga en 2da quincena */
@@ -178,6 +180,7 @@ export const engineLOTTT = {
     
     const tipoConcepto = parametros.tipoConcepto || 'NOMINA';
     const pagarBonoVacacional = parametros.pagarBonoVacacional || false;
+    const pagarUtilidades = parametros.pagarUtilidades || false;
     
     // Bono Transporte y Cesta Ticket: Solo en 2da quincena
     const bonoTransporte = parametros.bonoTransporte || 0;
@@ -197,9 +200,9 @@ export const engineLOTTT = {
       bonoVacacional = calcularBonoVacacional(new Date(fechaIngreso), sueldoBase);
     }
     
-    // Utilidades: Solo si es concepto especial
+    // Utilidades: Solo si está habilitado y es nómina
     let utilidades = 0;
-    if (tipoConcepto === 'UTILIDADES') {
+    if (pagarUtilidades && tipoConcepto === 'NOMINA') {
       utilidades = calcularUtilidades(new Date(fechaIngreso), sueldoBase);
     }
     

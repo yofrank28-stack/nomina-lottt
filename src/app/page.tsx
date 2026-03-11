@@ -1464,6 +1464,7 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
   const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
+  const [pagarUtilidades, setPagarUtilidades] = useState(false);
   const [empleadoSeleccionadoId, setEmpleadoSeleccionadoId] = useState<number | null>(null);
 
   // Conceptos manuales dinámicos
@@ -1591,6 +1592,7 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       umv: parametros.umv,
       tipoConcepto,
       pagarBonoVacacional,
+      pagarUtilidades,
       bonoTransporte: quincena === 2 ? parametros.bono_transporte : 0,
       cestaTicket: quincena === 2 ? parametros.cesta_ticket : 0
     };
@@ -1945,6 +1947,22 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
               />
               <label htmlFor="bonoVacacional" className="text-sm text-neutral-300">
                 PAGAR BONO VACACIONAL
+              </label>
+            </div>
+          )}
+          
+          {tipoConcepto === 'NOMINA' && (
+            <div className={`flex items-center gap-2 px-4 py-2 bg-neutral-700 rounded-lg ${esEmpresaTerminada ? 'opacity-50' : ''}`}>
+              <input
+                type="checkbox"
+                id="pagarUtilidades"
+                checked={pagarUtilidades}
+                onChange={(e) => setPagarUtilidades(e.target.checked)}
+                className="w-4 h-4"
+                disabled={esEmpresaTerminada}
+              />
+              <label htmlFor="pagarUtilidades" className="text-sm text-neutral-300">
+                PAGAR UTILIDADES
               </label>
             </div>
           )}
