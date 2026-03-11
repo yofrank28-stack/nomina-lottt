@@ -28,7 +28,8 @@ import {
   BookOpen,
   PenTool,
   Save,
-  X
+  X,
+  ArrowRightLeft
 } from "lucide-react";
 
 // ============================================================
@@ -345,7 +346,7 @@ function Dashboard() {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Building2 },
               ...(puedeVerTodasEmpresas() ? [{ id: 'empresas', label: 'Empresas', icon: Building2 }] : []),
-              { id: 'empleados', label: 'Empleados', icon: Users },
+              { id: 'empleados', label: 'Personal', icon: Users },
               { id: 'nomina', label: 'Nómina', icon: Receipt },
               { id: 'reportes', label: 'Reportes', icon: FileText },
               { id: 'parametros', label: 'Parámetros', icon: Settings },
@@ -919,6 +920,9 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
   const [searchTerm, setSearchTerm] = useState("");
   const [editMode, setEditMode] = useState<number | null>(null);
   const [egresandoId, setEgresandoId] = useState<number | null>(null);
+  const [transferirId, setTransferirId] = useState<number | null>(null);
+  const [empresaOrigenTransfer, setEmpresaOrigenTransfer] = useState<number | null>(null);
+  const [empresaDestinoTransfer, setEmpresaDestinoTransfer] = useState<number | null>(null);
   const [empresaFilter, setEmpresaFilter] = useState<number | 'all'>(empresaId || 'all');
   const [fechaEgreso, setFechaEgreso] = useState("");
   const [causaEgreso, setCausaEgreso] = useState("");
@@ -1057,6 +1061,30 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
     }
   };
 
+  const handleTransfer = () => {
+    if (transferirId && empresaDestinoTransfer) {
+      const empleado = empleados.find(e => e.id === transferirId);
+      const empresaOrigen = empresas.find(e => e.id === empleado?.empresa_id);
+      const empresaDestino = empresas.find(e => e.id === empresaDestinoTransfer);
+      
+      if (empleado && empresaOrigen && empresaDestino) {
+        updateEmpleado(transferirId, { empresa_id: empresaDestinoTransfer });
+        setSuccessMessage(`${empleado.nombre} ${empleado.apellido || ''} transferido de ${empresaOrigen.nombre} a ${empresaDestino.nombre}`);
+        setTransferirId(null);
+        setEmpresaOrigenTransfer(null);
+        setEmpresaDestinoTransfer(null);
+      }
+    } else {
+      setError("Debe seleccionar una empresa de destino");
+    }
+  };
+
+  const openTransferModal = (empleado: any) => {
+    setTransferirId(empleado.id);
+    setEmpresaOrigenTransfer(empleado.empresa_id);
+    setEmpresaDestinoTransfer(null);
+  };
+
   // Filtrar empleados por empresa (aislamiento multi-tenant)
   // Primero filtra por permisos, luego por búsqueda y empresa
   const filteredEmpleados = empleadosFiltrados.filter(e => {
@@ -1072,8 +1100,8 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Empleados</h2>
-          <p className="text-neutral-400">Gestión de empleados registrados</p>
+          <h2 className="text-2xl font-bold text-white">Personal</h2>
+          <p className="text-neutral-400">Gestión de personal registrado</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -1113,17 +1141,18 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
       {showForm && (
         <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
           <h3 className="text-lg font-semibold text-white mb-4">
-            {editMode ? 'Editar Empleado' : 'Nuevo Empleado'}
+            {editMode ? 'Editar Personal' : 'Nuevo Personal'}
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-neutral-300 mb-1">Empresa</label>
+              <label className="block text-sm text-neutral-300 mb-1">Asignar a Empresa *</label>
               <select
                 value={formData.empresa_id}
                 onChange={(e) => setFormData({ ...formData, empresa_id: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
                 required
               >
+                <option value="">Seleccionar empresa...</option>
                 {empresasPermitidasList.map(e => (
                   <option key={e.id} value={e.id}>{e.nombre}</option>
                 ))}
@@ -1288,13 +1317,22 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
                         <Edit className="w-4 h-4" />
                       </button>
                       {empleado.estatus !== 'EGRESADO' && (
-                        <button
-                          onClick={() => setEgresandoId(empleado.id)}
-                          className="p-1.5 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded"
-                          title="Egresar"
-                        >
-                          <UserMinus className="w-4 h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => openTransferModal(empleado)}
+                            className="p-1.5 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded"
+                            title="Transferir de Empresa"
+                          >
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEgresandoId(empleado.id)}
+                            className="p-1.5 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded"
+                            title="Egresar"
+                          >
+                            <UserMinus className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => handleDelete(empleado.id)}
@@ -1351,6 +1389,57 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
                 </button>
                 <button
                   onClick={() => { setEgresandoId(null); setFechaEgreso(""); setCausaEgreso(""); }}
+                  className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Transferencia de Empresa */}
+      {transferirId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-neutral-800 rounded-xl p-6 max-w-md w-full mx-4 border border-neutral-700">
+            <h3 className="text-lg font-semibold text-white mb-4">Transferir Personal de Empresa</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-neutral-300 mb-1">Empresa Origen</label>
+                <input
+                  type="text"
+                  value={empresas.find(e => e.id === empresaOrigenTransfer)?.nombre || ''}
+                  disabled
+                  className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-300 mb-1">Empresa Destino *</label>
+                <select
+                  value={empresaDestinoTransfer || ''}
+                  onChange={(e) => setEmpresaDestinoTransfer(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white"
+                  required
+                >
+                  <option value="">Seleccionar empresa...</option>
+                  {empresas.filter(e => e.id !== empresaOrigenTransfer && e.status !== 'terminated').map(e => (
+                    <option key={e.id} value={e.id}>{e.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-sm text-neutral-400">
+                El personal mantendrá su historial de ingresos y datos básicos.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleTransfer}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                >
+                  Confirmar Transferencia
+                </button>
+                <button
+                  onClick={() => { setTransferirId(null); setEmpresaOrigenTransfer(null); setEmpresaDestinoTransfer(null); }}
                   className="px-4 py-2 bg-neutral-700 text-white rounded-lg"
                 >
                   Cancelar
