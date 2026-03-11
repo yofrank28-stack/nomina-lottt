@@ -1774,8 +1774,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                 value={empleadoSeleccionadoId || ''}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setEmpleadoSeleccionadoId(val ? parseInt(val) : null);
-                  setLiquidaciones([]);
+                  const nuevoId = val ? parseInt(val) : null;
+                  // Limpieza de seguridad: Si cambia de trabajador, limpiar conceptos para evitar cruce de datos
+                  if (nuevoId !== empleadoSeleccionadoId) {
+                    setConceptosAsignaciones([]);
+                    setConceptosDeducciones([]);
+                    setLiquidaciones([]);
+                  }
+                  setEmpleadoSeleccionadoId(nuevoId);
                 }}
                 className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[250px] disabled:opacity-50"
                 disabled={esEmpresaTerminada || empleadosPorEmpresa.length === 0}
@@ -1941,6 +1947,53 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             )}
           </div>
         </div>
+        
+        {/* CÁLCULO EN TIEMPO REAL - Neto a Pagar */}
+        {empleadoSeleccionadoId && (
+          <div className="bg-blue-900/20 border border-blue-600/30 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-blue-400 flex items-center gap-2 mb-4">
+              <Calculator className="w-5 h-5" />Vista Previa - Cálculo en Tiempo Real
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-neutral-800/50 rounded-lg p-4">
+                <p className="text-neutral-400 text-sm">Sueldo Base</p>
+                <p className="text-2xl font-bold text-white">
+                  ${empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
+                    ? empleadoSeleccionado.sueldo_base.toFixed(2) 
+                    : (empleadoSeleccionado!.sueldo_base * tasaCambio).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-green-900/20 rounded-lg p-4 border border-green-600/30">
+                <p className="text-green-400 text-sm">Asignaciones Adicionales</p>
+                <p className="text-2xl font-bold text-green-400">
+                  ${calcularTotalConceptosAsignaciones(empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' ? empleadoSeleccionado.sueldo_base : empleadoSeleccionado!.sueldo_base / tasaCambio).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-red-900/20 rounded-lg p-4 border border-red-600/30">
+                <p className="text-red-400 text-sm">Deducciones Adicionales</p>
+                <p className="text-2xl font-bold text-red-400">
+                  ${calcularTotalConceptosDeducciones(empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' ? empleadoSeleccionado.sueldo_base : empleadoSeleccionado!.sueldo_base / tasaCambio).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500/50">
+                <p className="text-blue-300 text-sm">Neto a Pagar (Estimado)</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  ${(() => {
+                    const sb = empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
+                      ? empleadoSeleccionado.sueldo_base 
+                      : empleadoSeleccionado!.sueldo_base / tasaCambio;
+                    const asignaciones = calcularTotalConceptosAsignaciones(sb);
+                    const deducciones = calcularTotalConceptosDeducciones(sb);
+                    return (sb + asignaciones - deducciones).toFixed(2);
+                  })()}
+                </p>
+              </div>
+            </div>
+            <p className="text-neutral-400 text-xs mt-3">
+              * Este cálculo es una estimación. El monto final se mostrará al procesar la nómina.
+            </p>
+          </div>
+        )}
         {/* Alerta de Tope Legal */}
         {liquidaciones.length > 0 && (() => { const pd = liquidaciones.reduce((s,l) => s + l.total_deducciones, 0) / liquidaciones.length; const psb = liquidaciones.reduce((s,l) => s + l.sueldo_base, 0) / liquidaciones.length; const pct = psb > 0 ? (pd / psb) * 100 : 0; return pct > 50 ? <div className="mt-4 p-4 bg-red-900/30 border border-red-600 rounded-lg flex items-center gap-3"><AlertTriangle className="w-6 h-6 text-red-500" /><div><p className="text-red-400 font-semibold">Advertencia: Las deducciones totales exceden el límite legal permitido</p><p className="text-red-300/70 text-sm">Las deducciones representan el {pct.toFixed(1)}% del salario base (límite: 50%).</p></div></div> : null; })()}
       </div>
