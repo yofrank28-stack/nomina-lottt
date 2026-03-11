@@ -71,6 +71,9 @@ export interface Empleado {
   tiene_hijos: boolean;
   cantidad_hijos: number;
   empresa_nombre?: string; // Nombre de la empresa para mostrar
+  // Beneficios individuales (por trabajador)
+  pagar_bono_vacacional?: boolean;  // Bono vacacional individual
+  pagar_utilidades?: boolean;        // Utilidades individual
 }
 
 export interface Parametros {
@@ -145,7 +148,7 @@ export interface Liquidacion {
   tipo_cambio_usd: number;
   monto_bs: number;
   fecha_liquidacion?: string;
-  // Auditoría de tasa BCV utilizada
+  // Auditoría de tasa BCV utilizada (por trabajador individual)
   tasa_bcv_fecha?: string;  // Fecha cuando se obtuvo la tasa BCV
   tasa_bcv_oficial?: number;  // Tasa BCV oficial utilizada
   // Bonificaciones especiales

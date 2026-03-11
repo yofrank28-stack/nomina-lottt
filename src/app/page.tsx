@@ -143,7 +143,8 @@ function Dashboard() {
     setSuccessMessage,
     setError,
     puedeVerTodasEmpresas,
-    getEmpresaStatus
+    getEmpresaStatus,
+    updateEmpleado
   } = useAppStore();
 
   const [loadingTasa, setLoadingTasa] = useState(false);
@@ -1457,7 +1458,7 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
 // VISTA: NÓMINA
 // ============================================================
 function NominaView({ empresaId }: { empresaId?: number | null }) {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada, addToLoteEspera, updateInLoteEspera, removeFromLoteEspera, generateBatchFromCompany, clearLoteEspera, processLoteCompleto, loteEspera } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada, addToLoteEspera, updateInLoteEspera, removeFromLoteEspera, generateBatchFromCompany, clearLoteEspera, processLoteCompleto, loteEspera, updateEmpleado } = useAppStore();
   const router = useRouter();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
@@ -1466,6 +1467,18 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
   const [pagarUtilidades, setPagarUtilidades] = useState(false);
   const [empleadoSeleccionadoId, setEmpleadoSeleccionadoId] = useState<number | null>(null);
+  
+  // Estados para beneficios individuales por trabajador - derivados del empleado seleccionado
+  // Se calculan después de obtener empleadoSeleccionado
+
+  // Función para guardar la configuración individual del empleado
+  const guardarConfiguracionIndividual = (campo: 'pagar_bono_vacacional' | 'pagar_utilidades', valor: boolean) => {
+    if (!empleadoSeleccionadoId) return;
+    
+    const updateData: Partial<Empleado> = {};
+    updateData[campo] = valor;
+    updateEmpleado(empleadoSeleccionadoId, updateData);
+  };
 
   // Conceptos manuales dinámicos
   const [conceptosAsignaciones, setConceptosAsignaciones] = useState<ConceptoManual[]>([]);
@@ -1530,6 +1543,10 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
 
   // Obtener el empleado seleccionado para mostrar su sueldo base
   const empleadoSeleccionado = empleadoSeleccionadoId ? empleados.find(e => e.id === empleadoSeleccionadoId) : null;
+
+  // Beneficios individuales derivados del empleado seleccionado
+  const pagarBonoVacacionalIndividual = empleadoSeleccionado?.pagar_bono_vacacional ?? false;
+  const pagarUtilidadesIndividual = empleadoSeleccionado?.pagar_utilidades ?? false;
 
   // Obtener datos del lote para el empleado seleccionado (si existe)
   const empleadoEnLote = empleadoSeleccionadoId 
@@ -1621,7 +1638,15 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           sueldoBase: sueldoBaseUSD,
           fechaIngreso: emp.fecha_ingreso,
           tieneHijos: emp.tiene_hijos,
-          cantidadHijos: emp.cantidad_hijos
+          cantidadHijos: emp.cantidad_hijos,
+          // Datos para cálculos proporcionales
+          fechaEgreso: emp.fecha_egreso,
+          // Beneficios individuales por trabajador
+          pagarBonoVacacionalIndividual: emp.pagar_bono_vacacional,
+          pagarUtilidadesIndividual: emp.pagar_utilidades,
+          // Fechas del período para cálculos proporcionales
+          fechaInicioPeriodo: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
+          fechaFinPeriodo: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-30`
         },
         parametrosNomina
       );
@@ -1655,6 +1680,9 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
         tipo_cambio_usd: tasaCambio,
         monto_bs: nuevoNeto * tasaCambio,
         fecha_liquidacion: new Date().toISOString(),
+        // Auditoría individual de tasa BCV por trabajador
+        tasa_bcv_fecha: new Date().toISOString(),
+        tasa_bcv_oficial: tasaCambio,
         conceptos_asignaciones: conceptosAsignacionesActivos,
         conceptos_deducciones: conceptosDeduccionesActivos
       };
@@ -1770,26 +1798,72 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
         dias_trabajados: liq.dias_trabajados,
         fecha_pago: new Date().toLocaleDateString("es-VE")
       },
-      asignaciones: [
-        ...(liq.sueldo_base > 0 ? [{ descripcion: "Sueldo Base", monto: liq.sueldo_base }] : []),
-        ...(liq.bono_vacacional > 0 ? [{ descripcion: "Bono Vacacional", monto: liq.bono_vacacional }] : []),
-        ...(liq.utilidades > 0 ? [{ descripcion: "Utilidades", monto: liq.utilidades }] : []),
-        ...(liq.bono_transporte > 0 ? [{ descripcion: "Bono Transporte", monto: liq.bono_transporte }] : []),
-        ...(liq.cesta_ticket > 0 ? [{ descripcion: "Cesta Ticket", monto: liq.cesta_ticket }] : []),
-        ...(liq.conceptos_asignaciones || []).filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0).map((c: ConceptoManual) => ({ descripcion: c.denominacion, monto: c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100) }))
-      ],
-      deducciones: [
-        ...(liq.ivss_trabajador > 0 ? [{ descripcion: "IVSS", monto: liq.ivss_trabajador }] : []),
-        ...(liq.rpe_trabajador > 0 ? [{ descripcion: "RPE", monto: liq.rpe_trabajador }] : []),
-        ...(liq.faov_trabajador > 0 ? [{ descripcion: "FAOV", monto: liq.faov_trabajador }] : []),
-        ...(liq.inces_trabajador > 0 ? [{ descripcion: "INCES", monto: liq.inces_trabajador }] : []),
-        ...(liq.conceptos_deducciones || []).filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0).map((c: ConceptoManual) => ({ descripcion: c.denominacion, monto: c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100) }))
-      ],
+      // Construir array de asignaciones visibles (solo las que tienen monto > 0)
+      asignaciones: (() => {
+        const conceptos: { descripcion: string; monto: number }[] = [];
+        if (liq.sueldo_base > 0) conceptos.push({ descripcion: "Sueldo Base", monto: liq.sueldo_base });
+        if (liq.bono_vacacional > 0) conceptos.push({ descripcion: "Bono Vacacional", monto: liq.bono_vacacional });
+        if (liq.utilidades > 0) conceptos.push({ descripcion: "Utilidades", monto: liq.utilidades });
+        if (liq.bono_transporte > 0) conceptos.push({ descripcion: "Bono Transporte", monto: liq.bono_transporte });
+        if (liq.cesta_ticket > 0) conceptos.push({ descripcion: "Cesta Ticket", monto: liq.cesta_ticket });
+        // Agregar conceptos manuales de asignaciones
+        (liq.conceptos_asignaciones || [])
+          .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+          .forEach((c: ConceptoManual) => {
+            const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100);
+            if (monto > 0) conceptos.push({ descripcion: c.denominacion, monto });
+          });
+        return conceptos;
+      })(),
+      // Construir array de deducciones visibles (solo las que tienen monto > 0)
+      deducciones: (() => {
+        const conceptos: { descripcion: string; monto: number }[] = [];
+        if (liq.ivss_trabajador > 0) conceptos.push({ descripcion: "IVSS", monto: liq.ivss_trabajador });
+        if (liq.rpe_trabajador > 0) conceptos.push({ descripcion: "RPE", monto: liq.rpe_trabajador });
+        if (liq.faov_trabajador > 0) conceptos.push({ descripcion: "FAOV", monto: liq.faov_trabajador });
+        if (liq.inces_trabajador > 0) conceptos.push({ descripcion: "INCES", monto: liq.inces_trabajador });
+        // Agregar deducciones manuales (estas pueden generar aportes patronales)
+        (liq.conceptos_deducciones || [])
+          .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+          .forEach((c: ConceptoManual) => {
+            const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100);
+            if (monto > 0) conceptos.push({ descripcion: c.denominacion, monto });
+          });
+        return conceptos;
+      })(),
+      // Calcular totales como suma de conceptos visibles para integridad del recibo
       totales: {
-        total_asignaciones: liq.total_asignaciones,
-        total_deducciones: liq.total_deducciones,
+        total_asignaciones: (() => {
+          const conceptos = [];
+          if (liq.sueldo_base > 0) conceptos.push(liq.sueldo_base);
+          if (liq.bono_vacacional > 0) conceptos.push(liq.bono_vacacional);
+          if (liq.utilidades > 0) conceptos.push(liq.utilidades);
+          if (liq.bono_transporte > 0) conceptos.push(liq.bono_transporte);
+          if (liq.cesta_ticket > 0) conceptos.push(liq.cesta_ticket);
+          (liq.conceptos_asignaciones || [])
+            .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+            .forEach((c: ConceptoManual) => {
+              const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100);
+              if (monto > 0) conceptos.push(monto);
+            });
+          return conceptos.reduce((a, b) => a + b, 0);
+        })(),
+        total_deducciones: (() => {
+          const conceptos = [];
+          if (liq.ivss_trabajador > 0) conceptos.push(liq.ivss_trabajador);
+          if (liq.rpe_trabajador > 0) conceptos.push(liq.rpe_trabajador);
+          if (liq.faov_trabajador > 0) conceptos.push(liq.faov_trabajador);
+          if (liq.inces_trabajador > 0) conceptos.push(liq.inces_trabajador);
+          (liq.conceptos_deducciones || [])
+            .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+            .forEach((c: ConceptoManual) => {
+              const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100);
+              if (monto > 0) conceptos.push(monto);
+            });
+          return conceptos.reduce((a, b) => a + b, 0);
+        })(),
         neto_pagar: liq.neto_pagar,
-        tasa_cambio: tasaCambio,
+        tasa_cambio: liq.tasa_bcv_oficial || tasaCambio,
         neto_bs: liq.monto_bs
       },
       fecha_liquidacion: new Date().toLocaleDateString("es-VE")
@@ -1905,6 +1979,45 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
               <span className="text-sm text-blue-300">
                 Sueldo Base: {empleadoSeleccionado.tipo_moneda_sueldo === 'USD' ? `${empleadoSeleccionado.sueldo_base.toFixed(2)}` : `Bs. ${(empleadoSeleccionado.sueldo_base * tasaCambio).toFixed(2)}`}
               </span>
+            </div>
+          )}
+
+          {/* Checkboxes de Beneficios Individuales - Solo cuando hay trabajador seleccionado */}
+          {empleadoSeleccionado && tipoConcepto === 'NOMINA' && (
+            <div className="flex flex-wrap gap-3 px-4 py-2 bg-purple-600/20 border border-purple-600/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="bonoVacacionalIndividual"
+                  checked={pagarBonoVacacionalIndividual === true}
+                  onChange={(e) => {
+                    const valor = e.target.checked;
+                    guardarConfiguracionIndividual('pagar_bono_vacacional', valor);
+                  }}
+                  className="w-4 h-4 accent-purple-500"
+                  disabled={esEmpresaTerminada}
+                />
+                <label htmlFor="bonoVacacionalIndividual" className="text-sm text-purple-300">
+                  Bono Vacacional
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="utilidadesIndividual"
+                  checked={pagarUtilidadesIndividual === true}
+                  onChange={(e) => {
+                    const valor = e.target.checked;
+                    guardarConfiguracionIndividual('pagar_utilidades', valor);
+                  }}
+                  className="w-4 h-4 accent-purple-500"
+                  disabled={esEmpresaTerminada}
+                />
+                <label htmlFor="utilidadesIndividual" className="text-sm text-purple-300">
+                  Utilidades
+                </label>
+              </div>
+              <span className="text-xs text-neutral-400 ml-2">(Por trabajador)</span>
             </div>
           )}
 
@@ -2382,24 +2495,70 @@ function ReportesView({ empresaId }: { empresaId?: number | null }) {
         dias_trabajados: liquidacion.dias_trabajados,
         fecha_pago: new Date().toLocaleDateString("es-VE")
       },
-      asignaciones: [
-        { descripcion: "Sueldo Base", monto: liquidacion.sueldo_base },
-        { descripcion: "Bono Vacacional", monto: liquidacion.bono_vacacional },
-        { descripcion: "Utilidades", monto: liquidacion.utilidades },
-        ...(liquidacion.bono_transporte ? [{ descripcion: "Bono Transporte", monto: liquidacion.bono_transporte }] : []),
-        ...(liquidacion.cesta_ticket ? [{ descripcion: "Cesta Ticket", monto: liquidacion.cesta_ticket }] : [])
-      ],
-      deducciones: [
-        { descripcion: "IVSS", monto: liquidacion.ivss_trabajador },
-        { descripcion: "RPE", monto: liquidacion.rpe_trabajador },
-        { descripcion: "FAOV", monto: liquidacion.faov_trabajador },
-        { descripcion: "INCES", monto: liquidacion.inces_trabajador }
-      ],
+      // Construir array de asignaciones visibles con suma correcta
+      asignaciones: (() => {
+        const conceptos: { descripcion: string; monto: number }[] = [];
+        if (liquidacion.sueldo_base > 0) conceptos.push({ descripcion: "Sueldo Base", monto: liquidacion.sueldo_base });
+        if (liquidacion.bono_vacacional > 0) conceptos.push({ descripcion: "Bono Vacacional", monto: liquidacion.bono_vacacional });
+        if (liquidacion.utilidades > 0) conceptos.push({ descripcion: "Utilidades", monto: liquidacion.utilidades });
+        if ((liquidacion.bono_transporte || 0) > 0) conceptos.push({ descripcion: "Bono Transporte", monto: liquidacion.bono_transporte || 0 });
+        if ((liquidacion.cesta_ticket || 0) > 0) conceptos.push({ descripcion: "Cesta Ticket", monto: liquidacion.cesta_ticket || 0 });
+        (liquidacion.conceptos_asignaciones || [])
+          .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+          .forEach((c: ConceptoManual) => {
+            const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liquidacion.sueldo_base * (c.valor / 100);
+            if (monto > 0) conceptos.push({ descripcion: c.denominacion, monto });
+          });
+        return conceptos;
+      })(),
+      // Construir array de deducciones visibles
+      deducciones: (() => {
+        const conceptos: { descripcion: string; monto: number }[] = [];
+        if (liquidacion.ivss_trabajador > 0) conceptos.push({ descripcion: "IVSS", monto: liquidacion.ivss_trabajador });
+        if (liquidacion.rpe_trabajador > 0) conceptos.push({ descripcion: "RPE", monto: liquidacion.rpe_trabajador });
+        if (liquidacion.faov_trabajador > 0) conceptos.push({ descripcion: "FAOV", monto: liquidacion.faov_trabajador });
+        if (liquidacion.inces_trabajador > 0) conceptos.push({ descripcion: "INCES", monto: liquidacion.inces_trabajador });
+        (liquidacion.conceptos_deducciones || [])
+          .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+          .forEach((c: ConceptoManual) => {
+            const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liquidacion.sueldo_base * (c.valor / 100);
+            if (monto > 0) conceptos.push({ descripcion: c.denominacion, monto });
+          });
+        return conceptos;
+      })(),
+      // Calcular totales como suma de conceptos visibles
       totales: {
-        total_asignaciones: liquidacion.total_asignaciones,
-        total_deducciones: liquidacion.total_deducciones,
+        total_asignaciones: (() => {
+          const conceptos: number[] = [];
+          if (liquidacion.sueldo_base > 0) conceptos.push(liquidacion.sueldo_base);
+          if (liquidacion.bono_vacacional > 0) conceptos.push(liquidacion.bono_vacacional);
+          if (liquidacion.utilidades > 0) conceptos.push(liquidacion.utilidades);
+          if ((liquidacion.bono_transporte || 0) > 0) conceptos.push(liquidacion.bono_transporte || 0);
+          if ((liquidacion.cesta_ticket || 0) > 0) conceptos.push(liquidacion.cesta_ticket || 0);
+          (liquidacion.conceptos_asignaciones || [])
+            .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+            .forEach((c: ConceptoManual) => {
+              const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liquidacion.sueldo_base * (c.valor / 100);
+              if (monto > 0) conceptos.push(monto);
+            });
+          return conceptos.reduce((a, b) => a + b, 0);
+        })(),
+        total_deducciones: (() => {
+          const conceptos: number[] = [];
+          if (liquidacion.ivss_trabajador > 0) conceptos.push(liquidacion.ivss_trabajador);
+          if (liquidacion.rpe_trabajador > 0) conceptos.push(liquidacion.rpe_trabajador);
+          if (liquidacion.faov_trabajador > 0) conceptos.push(liquidacion.faov_trabajador);
+          if (liquidacion.inces_trabajador > 0) conceptos.push(liquidacion.inces_trabajador);
+          (liquidacion.conceptos_deducciones || [])
+            .filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0)
+            .forEach((c: ConceptoManual) => {
+              const monto = c.tipo === 'MONTO_FIJO' ? c.valor : liquidacion.sueldo_base * (c.valor / 100);
+              if (monto > 0) conceptos.push(monto);
+            });
+          return conceptos.reduce((a: number, b: number) => a + b, 0);
+        })(),
         neto_pagar: liquidacion.neto_pagar,
-        tasa_cambio: tasaCambio,
+        tasa_cambio: liquidacion.tasa_bcv_oficial || tasaCambio,
         neto_bs: liquidacion.monto_bs
       },
       fecha_liquidacion: new Date().toLocaleDateString("es-VE")
