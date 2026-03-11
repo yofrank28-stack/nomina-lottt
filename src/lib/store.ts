@@ -129,6 +129,15 @@ export interface Liquidacion {
   conceptos_deducciones?: ConceptoManual[];
 }
 
+// Interface para lote de espera (batch processing)
+export interface LoteEspera {
+  empleado_id: number;
+  empleado_nombre: string;
+  empleado_cedula: string;
+  liquidacion: Liquidacion;
+  fecha_agregado: string;
+}
+
 interface AppState {
   // Autenticación
   usuario: Usuario | null;
@@ -193,6 +202,12 @@ interface AppState {
   puedeAccederANomina: (empresaId: number) => boolean;
   marcarExpedienteDescargado: (id: number) => void;
   
+  // Batch processing (Lote de espera)
+  loteEspera: LoteEspera[];
+  addToLoteEspera: (item: LoteEspera) => void;
+  clearLoteEspera: () => void;
+  processLoteCompleto: () => Liquidacion[];
+  
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
@@ -230,6 +245,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   historialTasasActivas: [],
   historialTasasCambio: [],
   auditoriaCambiosTasas: [],
+  loteEspera: [],
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -443,8 +459,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       empresaSeleccionadaId: null,
       empleados: [],
       liquidaciones: [],
-      currentView: 'dashboard'
+      currentView: 'dashboard',
+      loteEspera: []
     });
+  },
+  
+  // Batch processing (Lote de espera)
+  addToLoteEspera: (item) => {
+    const { loteEspera } = get();
+    // Verificar si el empleado ya está en el lote
+    const exists = loteEspera.some(l => l.empleado_id === item.empleado_id);
+    if (exists) {
+      // Actualizar existente
+      const updated = loteEspera.map(l => 
+        l.empleado_id === item.empleado_id ? item : l
+      );
+      set({ loteEspera: updated });
+    } else {
+      // Agregar nuevo
+      set({ loteEspera: [...loteEspera, item] });
+    }
+  },
+  
+  clearLoteEspera: () => {
+    set({ loteEspera: [] });
+  },
+  
+  processLoteCompleto: () => {
+    const { loteEspera } = get();
+    const liquidaciones = loteEspera.map(l => l.liquidacion);
+    // Limpiar lote después de procesar
+    set({ loteEspera: [] });
+    return liquidaciones;
   },
   
   // Gestión de empleados

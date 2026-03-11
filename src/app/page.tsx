@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import useAppStore, { Empresa, Empleado, Liquidacion, ConceptoManual } from "../lib/store";
+import useAppStore, { Empresa, Empleado, Liquidacion, ConceptoManual, LoteEspera } from "../lib/store";
 import { engineLOTTT, ParametrosNomina } from "../lib/engine-lottt";
 import { getTasaCambio } from "../lib/bcv-service";
 import { generarReciboLiquidacion, generarLibroDiario, descargarPDF } from "../lib/pdf-generator";
@@ -1457,7 +1457,7 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
 // VISTA: NÓMINA
 // ============================================================
 function NominaView({ empresaId }: { empresaId?: number | null }) {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada, addToLoteEspera, clearLoteEspera, processLoteCompleto, loteEspera } = useAppStore();
   const router = useRouter();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
@@ -1542,7 +1542,7 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   // Filtrar empleados activos por empresa seleccionada
   const empleadosActivos = empleadosPorEmpresa.filter(e => e.estatus === 'ACTIVO');
 
-  const procesarNomina = async () => {
+  const procesarNomina = async (guardarEnLote: boolean = false) => {
     // Validar que hay una empresa seleccionada
     if (!empresaSeleccionada) {
       setError("ERROR: Debe seleccionar una empresa");
@@ -1552,6 +1552,12 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     // Validar que la empresa tiene empleados
     if (empleadosPorEmpresa.length === 0) {
       setError("ERROR: Esta empresa no tiene personal registrado. Agregue personal en la sección de Personal.");
+      return;
+    }
+    
+    // Validar que hay un empleado seleccionado para guardar en lote
+    if (guardarEnLote && !empleadoSeleccionadoId) {
+      setError("ERROR: Debe seleccionar un trabajador para guardar en lote");
       return;
     }
     
@@ -1631,10 +1637,62 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       };
     });
 
-    setLiquidaciones(nuevasLiquidaciones);
-    setSuccessMessage("Nómina procesada correctamente");
+    if (guardarEnLote) {
+      // Guardar cada empleado en el lote de espera
+      nuevasLiquidaciones.forEach((liquidacion, index) => {
+        const emp = empleadosAProcesar[index];
+        addToLoteEspera({
+          empleado_id: emp.id,
+          empleado_nombre: `${emp.nombre} ${emp.apellido || ''}`,
+          empleado_cedula: emp.cedula,
+          liquidacion,
+          fecha_agregado: new Date().toISOString()
+        });
+      });
+      setSuccessMessage(`Empleado(s) guardado(s) en lote. Total en espera: ${loteEspera.length + nuevasLiquidaciones.length}`);
+    } else {
+      setLiquidaciones(nuevasLiquidaciones);
+      setSuccessMessage("Nómina procesada correctamente");
+    }
     setProcesando(false);
   };
+
+  // Procesar lote completo (Guardar todos los empleados en lote)
+  const guardarEnLoteTodos = async () => {
+    if (!empresaSeleccionada) {
+      setError("ERROR: Debe seleccionar una empresa");
+      return;
+    }
+    if (empleadosPorEmpresa.length === 0) {
+      setError("ERROR: Esta empresa no tiene personal registrado");
+      return;
+    }
+    
+    // Forzar procesamiento de todos los empleados
+    await procesarNomina(true);
+  };
+
+  // Procesar nómina general (guardar todos los del lote al historial)
+  const procesarNominaGeneral = async () => {
+    if (loteEspera.length === 0) {
+      setError("ERROR: No hay empleados en el lote de espera. Agregue empleados usando 'Guardar en Lote'.");
+      return;
+    }
+    
+    setProcesando(true);
+    
+    // Obtener liquidaciones del lote y guardarlas
+    const liquidacionesLote = processLoteCompleto();
+    setLiquidaciones(liquidacionesLote);
+    setSuccessMessage(`Nómina general procesada: ${liquidacionesLote.length} empleado(s) guardado(s) en el historial`);
+    setProcesando(false);
+  };
+
+  // Calcular totales del lote
+  const totalLoteAsignaciones = loteEspera.reduce((sum, l) => sum + l.liquidacion.total_asignaciones, 0);
+  const totalLoteDeducciones = loteEspera.reduce((sum, l) => sum + l.liquidacion.total_deducciones, 0);
+  const totalLoteNeto = loteEspera.reduce((sum, l) => sum + l.liquidacion.neto_pagar, 0);
+  const totalLoteBs = loteEspera.reduce((sum, l) => sum + l.liquidacion.monto_bs, 0);
 
   // Calcular totales
   const totalAsignaciones = liquidaciones.reduce((sum, l) => sum + l.total_asignaciones, 0);
@@ -1852,14 +1910,26 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           )}
           
           <div className="flex items-end gap-2">
+            {/* Botón Guardar en Lote */}
             <button
-              onClick={procesarNomina}
-              disabled={procesando || esEmpresaTerminada}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              title={esEmpresaTerminada ? "Empresa terminada - Solo lectura" : ""}
+              onClick={() => procesarNomina(true)}
+              disabled={procesando || esEmpresaTerminada || !empleadoSeleccionadoId}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title={esEmpresaTerminada ? "Empresa terminada - Solo lectura" : !empleadoSeleccionadoId ? "Seleccione un trabajador primero" : ""}
             >
-              <Calculator className="w-4 h-4" />
-              {procesando ? "Procesando..." : "Procesar Nómina"}
+              <Save className="w-4 h-4" />
+              {procesando ? "Guardando..." : "Guardar en Lote"}
+            </button>
+            
+            {/* Botón Guardar Todos en Lote */}
+            <button
+              onClick={guardarEnLoteTodos}
+              disabled={procesando || esEmpresaTerminada || empleadosPorEmpresa.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title={esEmpresaTerminada ? "Empresa terminada" : "Guardar todos los empleados en lote"}
+            >
+              <Users className="w-4 h-4" />
+              {procesando ? "..." : "Guardar Todos"}
             </button>
           </div>
 
@@ -1869,6 +1939,131 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           </div>
         </div>
       </div>
+
+      {/* Tabla de Lote de Espera */}
+      {loteEspera.length > 0 && (
+        <div className="bg-neutral-800 rounded-xl border border-amber-600 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-amber-400 flex items-center gap-2">
+              <Save className="w-5 h-5" />
+              Lote de Espera - Empleados Guardados ({loteEspera.length})
+            </h3>
+            <div className="flex items-center gap-2">
+              {/* Botón Procesar Nómina General */}
+              <button
+                onClick={procesarNominaGeneral}
+                disabled={procesando}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+              >
+                <Calculator className="w-4 h-4" />
+                {procesando ? "Procesando..." : "Procesar Nómina de la Empresa"}
+              </button>
+              
+              {/* Botón Limpiar Lote */}
+              <button
+                onClick={() => {
+                  clearLoteEspera();
+                  setSuccessMessage("Lote de espera limpiado");
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
+              >
+                <Trash2 className="w-4 h-4" />
+                Limpiar Lote
+              </button>
+            </div>
+          </div>
+
+          {/* Totales del Lote */}
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-neutral-700 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">Total Asignaciones</p>
+              <p className="text-lg font-bold text-green-400">
+                {mostrarEnBs ? `Bs. ${(totalLoteAsignaciones * tasaCambio).toFixed(2)}` : `${totalLoteAsignaciones.toFixed(2)}`}
+              </p>
+            </div>
+            <div className="bg-neutral-700 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">Total Deducciones</p>
+              <p className="text-lg font-bold text-red-400">
+                {mostrarEnBs ? `Bs. ${(totalLoteDeducciones * tasaCambio).toFixed(2)}` : `${totalLoteDeducciones.toFixed(2)}`}
+              </p>
+            </div>
+            <div className="bg-neutral-700 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">Total Neto</p>
+              <p className="text-lg font-bold text-white">
+                {mostrarEnBs ? `Bs. ${totalLoteBs.toFixed(2)}` : `${totalLoteNeto.toFixed(2)}`}
+              </p>
+            </div>
+            <div className="bg-neutral-700 rounded-lg p-3 text-center">
+              <p className="text-xs text-neutral-400">Empleados</p>
+              <p className="text-lg font-bold text-blue-400">{loteEspera.length}</p>
+            </div>
+          </div>
+
+          {/* Tabla de empleados en lote */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-700">
+                <tr>
+                  <th className="px-3 py-2 text-left text-neutral-300 font-medium">Cédula</th>
+                  <th className="px-3 py-2 text-left text-neutral-300 font-medium">Nombre</th>
+                  <th className="px-3 py-2 text-right text-neutral-300 font-medium">Sueldo Base</th>
+                  <th className="px-3 py-2 text-right text-neutral-300 font-medium">Asignaciones</th>
+                  <th className="px-3 py-2 text-right text-neutral-300 font-medium">Deducciones</th>
+                  <th className="px-3 py-2 text-right text-neutral-300 font-medium">Neto Pagar</th>
+                  <th className="px-3 py-2 text-center text-neutral-300 font-medium">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loteEspera.map((item) => (
+                  <tr key={item.empleado_id} className="border-b border-neutral-700 hover:bg-neutral-700/50">
+                    <td className="px-3 py-2 text-neutral-300">{item.empleado_cedula}</td>
+                    <td className="px-3 py-2 text-white">{item.empleado_nombre}</td>
+                    <td className="px-3 py-2 text-right text-neutral-300">
+                      {mostrarEnBs 
+                        ? `Bs. ${(item.liquidacion.sueldo_base * tasaCambio).toFixed(2)}`
+                        : `${item.liquidacion.sueldo_base.toFixed(2)}`
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-right text-green-400">
+                      {mostrarEnBs 
+                        ? `Bs. ${(item.liquidacion.total_asignaciones * tasaCambio).toFixed(2)}`
+                        : `${item.liquidacion.total_asignaciones.toFixed(2)}`
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-right text-red-400">
+                      {mostrarEnBs 
+                        ? `Bs. ${(item.liquidacion.total_deducciones * tasaCambio).toFixed(2)}`
+                        : `${item.liquidacion.total_deducciones.toFixed(2)}`
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-white">
+                      {mostrarEnBs 
+                        ? `Bs. ${item.liquidacion.monto_bs.toFixed(2)}`
+                        : `${item.liquidacion.neto_pagar.toFixed(2)}`
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => {
+                          const updated = loteEspera.filter(l => l.empleado_id !== item.empleado_id);
+                          // Clear and re-add without this employee
+                          clearLoteEspera();
+                          updated.forEach(l => addToLoteEspera(l));
+                          setSuccessMessage("Empleado removido del lote");
+                        }}
+                        className="p-1 hover:bg-red-600 rounded text-neutral-400 hover:text-white"
+                        title="Remover del lote"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Conceptos Manuales Dinámicos */}
       <div className="bg-neutral-800 rounded-xl border border-neutral-700 p-6">
