@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import useAppStore, { Empresa, Empleado, Liquidacion } from "../lib/store";
+import useAppStore, { Empresa, Empleado, Liquidacion, ConceptoManual } from "../lib/store";
 import { engineLOTTT, ParametrosNomina } from "../lib/engine-lottt";
 import { getTasaCambio } from "../lib/bcv-service";
 import { generarReciboLiquidacion, generarLibroDiario, descargarPDF } from "../lib/pdf-generator";
@@ -1375,6 +1375,34 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
   const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
+
+  // Conceptos manuales dinámicos
+  const [conceptosAsignaciones, setConceptosAsignaciones] = useState<ConceptoManual[]>([]);
+  const [conceptosDeducciones, setConceptosDeducciones] = useState<ConceptoManual[]>([]);
+
+  const generarIdConcepto = () => Math.random().toString(36).substring(2, 11);
+
+  // Funciones para gestionar conceptos manuales
+  const agregarConceptoAsignacion = () => {
+    setConceptosAsignaciones([...conceptosAsignaciones, { id: generarIdConcepto(), denominacion: '', tipo: 'MONTO_FIJO', valor: 0, observaciones: '', activo: true }]);
+  };
+  const agregarConceptoDeduccion = () => {
+    setConceptosDeducciones([...conceptosDeducciones, { id: generarIdConcepto(), denominacion: '', tipo: 'MONTO_FIJO', valor: 0, observaciones: '', activo: true }]);
+  };
+  const actualizarConceptoAsignacion = (id: string, campo: keyof ConceptoManual, valor: any) => {
+    setConceptosAsignaciones(conceptosAsignaciones.map(c => c.id === id ? { ...c, [campo]: valor } : c));
+  };
+  const actualizarConceptoDeduccion = (id: string, campo: keyof ConceptoManual, valor: any) => {
+    setConceptosDeducciones(conceptosDeducciones.map(c => c.id === id ? { ...c, [campo]: valor } : c));
+  };
+  const eliminarConceptoAsignacion = (id: string) => {
+    setConceptosAsignaciones(conceptosAsignaciones.filter(c => c.id !== id));
+  };
+  const eliminarConceptoDeduccion = (id: string) => {
+    setConceptosDeducciones(conceptosDeducciones.filter(c => c.id !== id));
+  };
+  const calcularTotalConceptosAsignaciones = (sueldoBase: number) => conceptosAsignaciones.filter(c => c.activo && c.denominacion.trim() !== '').reduce((total, c) => c.tipo === 'MONTO_FIJO' ? total + c.valor : total + (sueldoBase * (c.valor / 100)), 0);
+  const calcularTotalConceptosDeducciones = (sueldoBase: number) => conceptosDeducciones.filter(c => c.activo && c.denominacion.trim() !== '').reduce((total, c) => c.tipo === 'MONTO_FIJO' ? total + c.valor : total + (sueldoBase * (c.valor / 100)), 0);
   
   // Obtener empresas permitidas para el selector
   const empresasPermitidasList = puedeVerTodasEmpresas() 
@@ -1426,22 +1454,33 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       cestaTicket: quincena === 2 ? parametros.cesta_ticket : 0
     };
 
+    const conceptosAsignacionesActivos = conceptosAsignaciones.filter(c => c.activo && c.denominacion.trim() !== '');
+    const conceptosDeduccionesActivos = conceptosDeducciones.filter(c => c.activo && c.denominacion.trim() !== '');
+
     const nuevasLiquidaciones: Liquidacion[] = empleadosActivos.map(emp => {
       const empresa = empresas.find(e => e.id === emp.empresa_id);
       const lunes = empresa?.lunes_mes || 4;
       const dias = quincena === 1 ? 15 : 15;
+      const sueldoBaseUSD = emp.tipo_moneda_sueldo === "USD" ? emp.sueldo_base : emp.sueldo_base / tasaCambio;
+      
+      const adicionalesAsignaciones = calcularTotalConceptosAsignaciones(sueldoBaseUSD);
+      const adicionalesDeducciones = calcularTotalConceptosDeducciones(sueldoBaseUSD);
       
       const result = engineLOTTT.procesarLiquidacion(
         {
           diasLaborados: dias,
           lunesPeriodo: lunes,
-          sueldoBase: emp.tipo_moneda_sueldo === "USD" ? emp.sueldo_base : emp.sueldo_base / tasaCambio,
+          sueldoBase: sueldoBaseUSD,
           fechaIngreso: emp.fecha_ingreso,
           tieneHijos: emp.tiene_hijos,
           cantidadHijos: emp.cantidad_hijos
         },
         parametrosNomina
       );
+
+      const nuevasAsignaciones = result.total_asignaciones + adicionalesAsignaciones;
+      const nuevasDeducciones = result.total_deducciones + adicionalesDeducciones;
+      const nuevoNeto = nuevasAsignaciones - nuevasDeducciones;
 
       return {
         empleado_id: emp.id,
@@ -1455,19 +1494,21 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
         sueldo_base: result.sueldo_base,
         bono_vacacional: result.bono_vacacional,
         utilidades: result.utilidades,
-        otras_asignaciones: result.otras_asignaciones,
-        total_asignaciones: result.total_asignaciones,
+        otras_asignaciones: adicionalesAsignaciones,
+        total_asignaciones: nuevasAsignaciones,
         ivss_trabajador: result.ivss_trabajador,
         rpe_trabajador: result.rpe_trabajador,
         faov_trabajador: result.faov_trabajador,
         inces_trabajador: result.inces_trabajador,
         inces_patronal: result.inces_patronal,
-        otras_deducciones: result.otras_deducciones,
-        total_deducciones: result.total_deducciones,
-        neto_pagar: result.neto_pagar,
+        otras_deducciones: adicionalesDeducciones,
+        total_deducciones: nuevasDeducciones,
+        neto_pagar: nuevoNeto,
         tipo_cambio_usd: tasaCambio,
-        monto_bs: result.neto_pagar_bs,
-        fecha_liquidacion: new Date().toISOString()
+        monto_bs: nuevoNeto * tasaCambio,
+        fecha_liquidacion: new Date().toISOString(),
+        conceptos_asignaciones: conceptosAsignacionesActivos,
+        conceptos_deducciones: conceptosDeduccionesActivos
       };
     });
 
@@ -1511,17 +1552,19 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
         fecha_pago: new Date().toLocaleDateString("es-VE")
       },
       asignaciones: [
-        { descripcion: "Sueldo Base", monto: liq.sueldo_base },
-        { descripcion: "Bono Vacacional", monto: liq.bono_vacacional },
-        { descripcion: "Utilidades", monto: liq.utilidades },
-        ...(liq.bono_transporte ? [{ descripcion: "Bono Transporte", monto: liq.bono_transporte }] : []),
-        ...(liq.cesta_ticket ? [{ descripcion: "Cesta Ticket", monto: liq.cesta_ticket }] : [])
+        ...(liq.sueldo_base > 0 ? [{ descripcion: "Sueldo Base", monto: liq.sueldo_base }] : []),
+        ...(liq.bono_vacacional > 0 ? [{ descripcion: "Bono Vacacional", monto: liq.bono_vacacional }] : []),
+        ...(liq.utilidades > 0 ? [{ descripcion: "Utilidades", monto: liq.utilidades }] : []),
+        ...(liq.bono_transporte > 0 ? [{ descripcion: "Bono Transporte", monto: liq.bono_transporte }] : []),
+        ...(liq.cesta_ticket > 0 ? [{ descripcion: "Cesta Ticket", monto: liq.cesta_ticket }] : []),
+        ...(liq.conceptos_asignaciones || []).filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0).map((c: ConceptoManual) => ({ descripcion: c.denominacion, monto: c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100) }))
       ],
       deducciones: [
-        { descripcion: "IVSS", monto: liq.ivss_trabajador },
-        { descripcion: "RPE", monto: liq.rpe_trabajador },
-        { descripcion: "FAOV", monto: liq.faov_trabajador },
-        { descripcion: "INCES", monto: liq.inces_trabajador }
+        ...(liq.ivss_trabajador > 0 ? [{ descripcion: "IVSS", monto: liq.ivss_trabajador }] : []),
+        ...(liq.rpe_trabajador > 0 ? [{ descripcion: "RPE", monto: liq.rpe_trabajador }] : []),
+        ...(liq.faov_trabajador > 0 ? [{ descripcion: "FAOV", monto: liq.faov_trabajador }] : []),
+        ...(liq.inces_trabajador > 0 ? [{ descripcion: "INCES", monto: liq.inces_trabajador }] : []),
+        ...(liq.conceptos_deducciones || []).filter((c: ConceptoManual) => c.activo && c.denominacion.trim() !== '' && c.valor > 0).map((c: ConceptoManual) => ({ descripcion: c.denominacion, monto: c.tipo === 'MONTO_FIJO' ? c.valor : liq.sueldo_base * (c.valor / 100) }))
       ],
       totales: {
         total_asignaciones: liq.total_asignaciones,
@@ -1661,6 +1704,62 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <span className="text-green-400 font-semibold">Bs. {tasaCambio.toFixed(2)}</span>
           </div>
         </div>
+      </div>
+
+      {/* Conceptos Manuales Dinámicos */}
+      <div className="bg-neutral-800 rounded-xl border border-neutral-700 p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-green-400 flex items-center gap-2"><Plus className="w-5 h-5" />Asignaciones Adicionales</h3>
+              <button onClick={agregarConceptoAsignacion} disabled={esEmpresaTerminada} className="flex items-center gap-1 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg text-sm disabled:opacity-50"><Plus className="w-4 h-4" />Agregar</button>
+            </div>
+            {conceptosAsignaciones.length === 0 ? <p className="text-neutral-500 text-sm italic">Sin conceptos adicionales.</p> : (
+              <div className="space-y-3">
+                {conceptosAsignaciones.map(c => (
+                  <div key={c.id} className={`p-3 bg-neutral-700/50 rounded-lg border ${c.activo ? 'border-green-600/30' : 'border-neutral-600'}`}>
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={c.activo} onChange={e => actualizarConceptoAsignacion(c.id, 'activo', e.target.checked)} disabled={esEmpresaTerminada} className="w-4 h-4 mt-1" />
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2">
+                        <input type="text" value={c.denominacion} onChange={e => actualizarConceptoAsignacion(c.id, 'denominacion', e.target.value)} placeholder="Denominación" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                        <select value={c.tipo} onChange={e => actualizarConceptoAsignacion(c.id, 'tipo', e.target.value)} disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm"><option value="MONTO_FIJO">Monto Fijo</option><option value="PORCENTAJE">Porcentaje</option></select>
+                        <input type="number" value={c.valor} onChange={e => actualizarConceptoAsignacion(c.id, 'valor', parseFloat(e.target.value) || 0)} placeholder="Valor" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                        <input type="text" value={c.observaciones} onChange={e => actualizarConceptoAsignacion(c.id, 'observaciones', e.target.value)} placeholder="Notas" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                      </div>
+                      <button onClick={() => eliminarConceptoAsignacion(c.id)} disabled={esEmpresaTerminada} className="p-1.5 text-red-400 hover:text-red-300 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-red-400 flex items-center gap-2"><Plus className="w-5 h-5" />Deducciones Adicionales</h3>
+              <button onClick={agregarConceptoDeduccion} disabled={esEmpresaTerminada} className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm disabled:opacity-50"><Plus className="w-4 h-4" />Agregar</button>
+            </div>
+            {conceptosDeducciones.length === 0 ? <p className="text-neutral-500 text-sm italic">Sin deducciones adicionales.</p> : (
+              <div className="space-y-3">
+                {conceptosDeducciones.map(c => (
+                  <div key={c.id} className={`p-3 bg-neutral-700/50 rounded-lg border ${c.activo ? 'border-red-600/30' : 'border-neutral-600'}`}>
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={c.activo} onChange={e => actualizarConceptoDeduccion(c.id, 'activo', e.target.checked)} disabled={esEmpresaTerminada} className="w-4 h-4 mt-1" />
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2">
+                        <input type="text" value={c.denominacion} onChange={e => actualizarConceptoDeduccion(c.id, 'denominacion', e.target.value)} placeholder="Denominación" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                        <select value={c.tipo} onChange={e => actualizarConceptoDeduccion(c.id, 'tipo', e.target.value)} disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm"><option value="MONTO_FIJO">Monto Fijo</option><option value="PORCENTAJE">Porcentaje</option></select>
+                        <input type="number" value={c.valor} onChange={e => actualizarConceptoDeduccion(c.id, 'valor', parseFloat(e.target.value) || 0)} placeholder="Valor" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                        <input type="text" value={c.observaciones} onChange={e => actualizarConceptoDeduccion(c.id, 'observaciones', e.target.value)} placeholder="Notas" disabled={esEmpresaTerminada} className="px-2 py-1.5 bg-neutral-600 border border-neutral-500 rounded text-white text-sm" />
+                      </div>
+                      <button onClick={() => eliminarConceptoDeduccion(c.id)} disabled={esEmpresaTerminada} className="p-1.5 text-red-400 hover:text-red-300 disabled:opacity-50"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Alerta de Tope Legal */}
+        {liquidaciones.length > 0 && (() => { const pd = liquidaciones.reduce((s,l) => s + l.total_deducciones, 0) / liquidaciones.length; const psb = liquidaciones.reduce((s,l) => s + l.sueldo_base, 0) / liquidaciones.length; const pct = psb > 0 ? (pd / psb) * 100 : 0; return pct > 50 ? <div className="mt-4 p-4 bg-red-900/30 border border-red-600 rounded-lg flex items-center gap-3"><AlertTriangle className="w-6 h-6 text-red-500" /><div><p className="text-red-400 font-semibold">Advertencia: Las deducciones totales exceden el límite legal permitido</p><p className="text-red-300/70 text-sm">Las deducciones representan el {pct.toFixed(1)}% del salario base (límite: 50%).</p></div></div> : null; })()}
       </div>
 
       {/* Resultados */}

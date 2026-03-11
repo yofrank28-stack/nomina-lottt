@@ -86,6 +86,15 @@ export interface Parametros {
   cesta_ticket: number;  // Cesta ticket ($40)
 }
 
+export interface ConceptoManual {
+  id: string;
+  denominacion: string;
+  tipo: 'MONTO_FIJO' | 'PORCENTAJE';
+  valor: number;
+  observaciones: string;
+  activo: boolean;
+}
+
 export interface Liquidacion {
   id?: number;
   empleado_id: number;
@@ -115,6 +124,9 @@ export interface Liquidacion {
   // Bonificaciones especiales
   bono_transporte?: number;
   cesta_ticket?: number;
+  // Conceptos manuales (persistencia en histórico)
+  conceptos_asignaciones?: ConceptoManual[];
+  conceptos_deducciones?: ConceptoManual[];
 }
 
 interface AppState {
