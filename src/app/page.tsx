@@ -1457,13 +1457,14 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
 // VISTA: NÓMINA
 // ============================================================
 function NominaView({ empresaId }: { empresaId?: number | null }) {
-  const { empleados, empresas, tasaCambio, setSuccessMessage, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas } = useAppStore();
+  const { empleados, empresas, tasaCambio, setSuccessMessage, setError, setLiquidaciones, liquidaciones, parametros, empresasPermitidas, puedeVerTodasEmpresas, empresaSeleccionadaId, setEmpresaSeleccionada } = useAppStore();
   const router = useRouter();
   const [mostrarEnBs, setMostrarEnBs] = useState(true);
   const [quincena, setQuincena] = useState(1);
   const [procesando, setProcesando] = useState(false);
   const [tipoConcepto, setTipoConcepto] = useState<'NOMINA' | 'UTILIDADES' | 'AGUINALDOS'>('NOMINA');
   const [pagarBonoVacacional, setPagarBonoVacacional] = useState(false);
+  const [empleadoSeleccionadoId, setEmpleadoSeleccionadoId] = useState<number | null>(null);
 
   // Conceptos manuales dinámicos
   const [conceptosAsignaciones, setConceptosAsignaciones] = useState<ConceptoManual[]>([]);
@@ -1499,8 +1500,26 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     : empresas.filter(e => empresasPermitidas.includes(e.id));
   
   // Usar empresaId si está seleccionado, o la primera empresa permitida
-  const empresaDefault = empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
-  const [empresaSeleccionada, setEmpresaSeleccionada] = useState<number>(empresaDefault);
+  // Persistir la selección en el estado global
+  const empresaDefault = empresaSeleccionadaId || empresaId || (empresasPermitidasList.length > 0 ? empresasPermitidasList[0].id : 2);
+  const [empresaSeleccionada, setEmpresaSeleccionadaLocal] = useState<number>(empresaDefault);
+
+  // Handler para cambio de empresa desde el selector - persiste en estado global
+  const handleEmpresaChange = (nuevaEmpresa: number) => {
+    setEmpresaSeleccionada(nuevaEmpresa);
+    setEmpresaSeleccionadaLocal(nuevaEmpresa);
+    setEmpleadoSeleccionadoId(null);
+    setLiquidaciones([]);
+  };
+
+  // Obtener empleados filtrados por la empresa seleccionada
+  const empleadosPorEmpresa = empleados.filter(e => {
+    const tienePermiso = puedeVerTodasEmpresas() || empresasPermitidas.includes(e.empresa_id);
+    return e.estatus === 'ACTIVO' && e.empresa_id !== 1 && e.empresa_id === empresaSeleccionada && tienePermiso;
+  });
+
+  // Obtener el empleado seleccionado para mostrar su sueldo base
+  const empleadoSeleccionado = empleadoSeleccionadoId ? empleados.find(e => e.id === empleadoSeleccionadoId) : null;
 
   // Obtener la empresa seleccionada para verificar su estatus
   const empresaActual = empresas.find(e => e.id === empresaSeleccionada);
@@ -1520,16 +1539,22 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   // Si la empresa está TERMINADA - modo solo lectura
   const esEmpresaTerminada = estatusEmpresa === 'terminated';
 
-  // Filtrar empleados activos por empresa seleccionada (aislamiento multi-tenant)
-  const empleadosActivos = empleados.filter(e => {
-    const tienePermiso = puedeVerTodasEmpresas() || empresasPermitidas.includes(e.empresa_id);
-    return e.estatus === 'ACTIVO' &&
-      e.empresa_id !== 1 &&
-      e.empresa_id === empresaSeleccionada &&
-      tienePermiso;
-  });
+  // Filtrar empleados activos por empresa seleccionada
+  const empleadosActivos = empleadosPorEmpresa.filter(e => e.estatus === 'ACTIVO');
 
   const procesarNomina = async () => {
+    // Validar que hay una empresa seleccionada
+    if (!empresaSeleccionada) {
+      setError("ERROR: Debe seleccionar una empresa");
+      return;
+    }
+    
+    // Validar que la empresa tiene empleados
+    if (empleadosPorEmpresa.length === 0) {
+      setError("ERROR: Esta empresa no tiene personal registrado. Agregue personal en la sección de Personal.");
+      return;
+    }
+    
     setProcesando(true);
     
     const parametrosNomina: ParametrosNomina = {
@@ -1546,7 +1571,12 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     const conceptosAsignacionesActivos = conceptosAsignaciones.filter(c => c.activo && c.denominacion.trim() !== '');
     const conceptosDeduccionesActivos = conceptosDeducciones.filter(c => c.activo && c.denominacion.trim() !== '');
 
-    const nuevasLiquidaciones: Liquidacion[] = empleadosActivos.map(emp => {
+    // Si hay un empleado seleccionado, procesar solo ese empleado
+    const empleadosAProcesar = empleadoSeleccionadoId 
+      ? empleadosActivos.filter(e => e.id === empleadoSeleccionadoId)
+      : empleadosActivos;
+
+    const nuevasLiquidaciones: Liquidacion[] = empleadosAProcesar.map(emp => {
       const empresa = empresas.find(e => e.id === emp.empresa_id);
       const lunes = empresa?.lunes_mes || 4;
       const dias = quincena === 1 ? 15 : 15;
@@ -1718,12 +1748,13 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
 
       {/* Controles */}
       <div className="bg-neutral-800 rounded-xl p-6 border border-neutral-700">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          {/* Selector de Empresa */}
           <div>
             <label className="block text-sm text-neutral-300 mb-1">Empresa</label>
             <select
               value={empresaSeleccionada}
-              onChange={(e) => setEmpresaSeleccionada(parseInt(e.target.value))}
+              onChange={(e) => handleEmpresaChange(parseInt(e.target.value))}
               className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[200px] disabled:opacity-50"
               disabled={esEmpresaTerminada || (!puedeVerTodasEmpresas() && empresasPermitidas.length === 1)}
             >
@@ -1732,6 +1763,44 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
               ))}
             </select>
           </div>
+
+          {/* Selector de Trabajador - Solo aparece cuando hay empresa seleccionada */}
+          {empresaSeleccionada > 0 && (
+            <div>
+              <label className="block text-sm text-neutral-300 mb-1">
+                Seleccionar Trabajador/Obrero {!empleadoSeleccionadoId && <span className="text-red-400 ml-1">*</span>}
+              </label>
+              <select
+                value={empleadoSeleccionadoId || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEmpleadoSeleccionadoId(val ? parseInt(val) : null);
+                  setLiquidaciones([]);
+                }}
+                className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[250px] disabled:opacity-50"
+                disabled={esEmpresaTerminada || empleadosPorEmpresa.length === 0}
+              >
+                <option value="">-- Seleccionar --</option>
+                {empleadosPorEmpresa.length === 0 ? (
+                  <option disabled>Esta empresa no tiene personal registrado</option>
+                ) : (
+                  empleadosPorEmpresa.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.nombre} {emp.apellido} - {emp.cedula}</option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
+          {/* Etiqueta de Sueldo Base cuando hay trabajador seleccionado */}
+          {empleadoSeleccionado && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-600/50 rounded-lg">
+              <DollarSign className="w-4 h-4 text-blue-400" />
+              <span className="text-sm text-blue-300">
+                Sueldo Base: {empleadoSeleccionado.tipo_moneda_sueldo === 'USD' ? `${empleadoSeleccionado.sueldo_base.toFixed(2)}` : `Bs. ${(empleadoSeleccionado.sueldo_base * tasaCambio).toFixed(2)}`}
+              </span>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-neutral-300 mb-1">Quincena</label>
@@ -1797,11 +1866,29 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
 
       {/* Conceptos Manuales Dinámicos */}
       <div className="bg-neutral-800 rounded-xl border border-neutral-700 p-6">
+        {/* Mensaje de validación si no hay trabajadores */}
+        {empleadosPorEmpresa.length === 0 && (
+          <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-600 rounded-lg flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+            <div>
+              <p className="text-yellow-400 font-semibold">Esta empresa no tiene personal registrado</p>
+              <p className="text-yellow-300/70 text-sm">Agregue personal en la sección de Personal antes de procesar la nómina.</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-green-400 flex items-center gap-2"><Plus className="w-5 h-5" />Asignaciones Adicionales</h3>
-              <button onClick={agregarConceptoAsignacion} disabled={esEmpresaTerminada} className="flex items-center gap-1 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg text-sm disabled:opacity-50"><Plus className="w-4 h-4" />Agregar</button>
+              <button 
+                onClick={agregarConceptoAsignacion} 
+                disabled={esEmpresaTerminada || !empleadoSeleccionadoId}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!empleadoSeleccionadoId ? "Seleccione un trabajador primero" : ""}
+              >
+                <Plus className="w-4 h-4" />Agregar
+              </button>
             </div>
             {conceptosAsignaciones.length === 0 ? <p className="text-neutral-500 text-sm italic">Sin conceptos adicionales.</p> : (
               <div className="space-y-3">
@@ -1825,7 +1912,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-red-400 flex items-center gap-2"><Plus className="w-5 h-5" />Deducciones Adicionales</h3>
-              <button onClick={agregarConceptoDeduccion} disabled={esEmpresaTerminada} className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm disabled:opacity-50"><Plus className="w-4 h-4" />Agregar</button>
+              <button 
+                onClick={agregarConceptoDeduccion} 
+                disabled={esEmpresaTerminada || !empleadoSeleccionadoId}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!empleadoSeleccionadoId ? "Seleccione un trabajador primero" : ""}
+              >
+                <Plus className="w-4 h-4" />Agregar
+              </button>
             </div>
             {conceptosDeducciones.length === 0 ? <p className="text-neutral-500 text-sm italic">Sin deducciones adicionales.</p> : (
               <div className="space-y-3">
