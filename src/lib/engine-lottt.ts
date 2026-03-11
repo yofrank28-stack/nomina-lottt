@@ -87,9 +87,10 @@ function calcularRetenciones(
   // FAOV (1%): Sueldo Mensual * 0.01
   const faov_trab = sueldoMensual * 0.01;
   
-  // INCES Trabajador (0.5%): SOLO aplica en Utilidades o Aguinaldos, NO en nómina ordinaria
+  // INCES Trabajador (0.5%): SOLO aplica en Utilidades/Aguinaldos Y solo si la empresa tiene 5+ empleados
   const esConceptoEspecial = parametros.tipoConcepto === 'UTILIDADES' || parametros.tipoConcepto === 'AGUINALDOS';
-  const inces_trabajador = esConceptoEspecial ? baseCalculo * 0.005 * lunes : 0;
+  const tieneSuficientesEmpleados = parametros.numEmpleados >= 5;
+  const inces_trabajador = esConceptoEspecial && tieneSuficientesEmpleados ? baseCalculo * 0.005 * lunes : 0;
   
   // INCES Patronal (2%): Solo si la empresa tiene 5 o más empleados
   const inces_patronal = parametros.numEmpleados >= 5 ? baseCalculo * 0.02 * lunes : 0;

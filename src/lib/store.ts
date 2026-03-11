@@ -95,6 +95,30 @@ export interface ConceptoManual {
   activo: boolean;
 }
 
+// Conceptos patronales definibles - Aportes del empleador configurables
+// Se calculan automáticamente cuando el empleado tiene una deducción manual específica activa
+export interface ConceptoPatronal {
+  id: string;
+  /** Nombre del aporte patronalej. "Aporte Patronal Caja de Ahorro" */
+  denominacion: string;
+  /** Tipo de valor: Monto fijo o Porcentaje */
+  tipo: 'MONTO_FIJO' | 'PORCENTAJE';
+  /** Valor del aporte (monto o porcentaje según tipo) */
+  valor: number;
+  /** ID del concepto de deducción manual que activa este aporte */
+  concepto_trigger_id: string;
+  /** Nombre del trigger para mostrar en UI */
+  concepto_trigger_nombre: string;
+  /** Cuenta contable de gasto (DEBE) */
+  cuenta_gasto: string;
+  /** Cuenta contable de pasivo (HABER) */
+  cuenta_pasivo: string;
+  /** Si es true, el monto NO aparece en el recibo de pago */
+  solo_contable: boolean;
+  /** Si el concepto está activo para usar */
+  activo: boolean;
+}
+
 export interface Liquidacion {
   id?: number;
   empleado_id: number;
@@ -121,6 +145,9 @@ export interface Liquidacion {
   tipo_cambio_usd: number;
   monto_bs: number;
   fecha_liquidacion?: string;
+  // Auditoría de tasa BCV utilizada
+  tasa_bcv_fecha?: string;  // Fecha cuando se obtuvo la tasa BCV
+  tasa_bcv_oficial?: number;  // Tasa BCV oficial utilizada
   // Bonificaciones especiales
   bono_transporte?: number;
   cesta_ticket?: number;
@@ -165,6 +192,15 @@ export interface AsientoContable {
   inces_por_pagar: number;
   aportes_especiales_por_pagar: number;
   total_haber: number;
+  // Conceptos patronales definibles - Pasivos por pagar
+  conceptos_patronales_detalle?: {
+    concepto_id: string;
+    denominacion: string;
+    cuenta_gasto: string;
+    cuenta_pasivo: string;
+    monto: number;
+  }[];
+  total_pasivos_patronales?: number;
   // Detalle por empleado
   empleados: {
     empleado_id: number;
@@ -250,6 +286,12 @@ interface AppState {
   clearLoteEspera: () => void;
   processLoteCompleto: (aportesEspeciales?: number) => { liquidaciones: Liquidacion[]; asiento: AsientoContable | null };
   
+  // Conceptos patronales definibles
+  conceptosPatronales: ConceptoPatronal[];
+  addConceptoPatronal: (concepto: ConceptoPatronal) => void;
+  updateConceptoPatronal: (id: string, data: Partial<ConceptoPatronal>) => void;
+  deleteConceptoPatronal: (id: string) => void;
+  
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
@@ -290,6 +332,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loteEspera: [],
   asientosContables: [],
   ultimoAsiento: null,
+  conceptosPatronales: [],
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -639,7 +682,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   
   processLoteCompleto: (aportesEspeciales = 0) => {
-    const { loteEspera, parametros, tasaCambio, empresas } = get();
+    const { loteEspera, parametros, tasaCambio, empresas, conceptosPatronales } = get();
     
     if (loteEspera.length === 0) {
       return { liquidaciones: [], asiento: null };
@@ -687,9 +730,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Total de aportes patronales (para el DEBE como gasto)
     const totalAportesPatronales = ivssPatronal + faovPatronal + spfPatronal + incesPatronal;
     
+    // ============================================================
+    // CALCULAR CONCEPTOS PATRONALES DEFINIBLES
+    // Por cada concepto patronale verificamos si el empleado tiene
+    // la deducción manual activada (trigger)
+    // ============================================================
+    const conceptosPatronalesActivos = conceptosPatronales.filter(cp => cp.activo);
+    const conceptosPatronalesDetalle: {
+      concepto_id: string;
+      denominacion: string;
+      cuenta_gasto: string;
+      cuenta_pasivo: string;
+      monto: number;
+    }[] = [];
+    
+    // Inicializar totales por concepto
+    const totalesPorConcepto: Record<string, number> = {};
+    
+    // Por cada concepto patronale definible
+    conceptosPatronalesActivos.forEach(cp => {
+      let totalMontoConcepto = 0;
+      
+      // Buscar empleados que tengan el trigger activo
+      loteEspera.forEach(item => {
+        const deducciones = item.liquidacion.conceptos_deducciones || [];
+        const triggerActivo = deducciones.some(
+          d => d.id === cp.concepto_trigger_id && d.activo && d.denominacion.trim() !== ''
+        );
+        
+        if (triggerActivo) {
+          // Calcular el monto del aporte patronale
+          const monto = cp.tipo === 'MONTO_FIJO' 
+            ? cp.valor 
+            : item.liquidacion.sueldo_base * (cp.valor / 100);
+          totalMontoConcepto += monto;
+        }
+      });
+      
+      if (totalMontoConcepto > 0) {
+        conceptosPatronalesDetalle.push({
+          concepto_id: cp.id,
+          denominacion: cp.denominacion,
+          cuenta_gasto: cp.cuenta_gasto,
+          cuenta_pasivo: cp.cuenta_pasivo,
+          monto: Math.round(totalMontoConcepto * 100) / 100
+        });
+        totalesPorConcepto[cp.id] = totalMontoConcepto;
+      }
+    });
+    
+    // Total de conceptos patronales definibles
+    const totalPasivosPatronales = Object.values(totalesPorConcepto).reduce((sum, m) => sum + m, 0);
+    
     // Generar el asiento contable
-    // DEBE: Gastos (Sueldos + Aportes Patronales + Provisiones)
-    // HABER: Acreedores (Neto a Pagar + Retenciones + Aportes Patronales por Pagar)
+    // DEBE: Gastos (Sueldos + Aportes Patronales + Provisiones + Conceptos Patronales Definibles)
+    // HABER: Acreedores (Neto a Pagar + Retenciones + Aportes Patronales por Pagar + Conceptos Patronales por Pagar)
     const asiento: AsientoContable = {
       id: `ASiento-${Date.now()}`,
       empresa_id: primeraLiquidacion.empresa_id,
@@ -699,14 +794,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       mes: primeraLiquidacion.mes,
       quincena: primeraLiquidacion.quincena,
       fecha_generacion: new Date().toISOString(),
-      // DEBE: Gastos = Sueldo Base + Aportes Patronales + Provisiones
+      // DEBE: Gastos = Sueldo Base + Aportes Patronales + Provisiones + Conceptos Patronales Definibles
       gasto_sueldos: totalSueldoBase,
       gasto_prestaciones: garantiaPrestaciones,
       gasto_intereses: interesesPrestaciones,
       gasto_utilidades: aliCuotaUtilidades,
       gasto_bono_vacacional: aliCuotaBonoVacacional,
-      total_debe: totalSueldoBase + totalAportesPatronales + garantiaPrestaciones + interesesPrestaciones + aliCuotaUtilidades + aliCuotaBonoVacacional,
-      // HABER: Neto a Pagar + Retenciones (IVSS trab, FAOV trab) + Aportes Patronales por Pagar
+      total_debe: totalSueldoBase + totalAportesPatronales + garantiaPrestaciones + interesesPrestaciones + aliCuotaUtilidades + aliCuotaBonoVacacional + totalPasivosPatronales,
+      // HABER: Neto a Pagar + Retenciones (IVSS trab, FAOV trab) + Aportes Patronales por Pagar + Conceptos Patronales por Pagar
       // NOTA: RPE, INCES Trabajador NO van al recibo, solo al asiento
       neto_pagar_banco: totalNetoPagar,
       ivss_trabajador_por_pagar: totalIvssTrabajador,
@@ -716,7 +811,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       spf_por_pagar: spfPatronal,
       inces_por_pagar: incesPatronal,
       aportes_especiales_por_pagar: aportesEspeciales,
-      total_haber: totalNetoPagar + totalIvssTrabajador + totalFaovTrabajador + ivssPatronal + faovPatronal + spfPatronal + incesPatronal + aportesEspeciales,
+      total_haber: totalNetoPagar + totalIvssTrabajador + totalFaovTrabajador + ivssPatronal + faovPatronal + spfPatronal + incesPatronal + aportesEspeciales + totalPasivosPatronales,
+      // Conceptos patronales definibles
+      conceptos_patronales_detalle: conceptosPatronalesDetalle,
+      total_pasivos_patronales: totalPasivosPatronales,
       // Detalle por empleado
       empleados: loteEspera.map(l => ({
         empleado_id: l.empleado_id,
@@ -737,6 +835,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     
     return { liquidaciones, asiento };
+  },
+  
+  // Gestión de Conceptos Patronales Definibles
+  addConceptoPatronal: (concepto) => {
+    const { conceptosPatronales } = get();
+    set({ conceptosPatronales: [...conceptosPatronales, concepto] });
+  },
+  
+  updateConceptoPatronal: (id, data) => {
+    const { conceptosPatronales } = get();
+    const nuevosConceptos = conceptosPatronales.map(c => 
+      c.id === id ? { ...c, ...data } : c
+    );
+    set({ conceptosPatronales: nuevosConceptos });
+  },
+  
+  deleteConceptoPatronal: (id) => {
+    const { conceptosPatronales } = get();
+    set({ conceptosPatronales: conceptosPatronales.filter(c => c.id !== id) });
   },
   
   // Gestión de empleados
