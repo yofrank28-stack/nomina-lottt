@@ -138,6 +138,43 @@ export interface LoteEspera {
   fecha_agregado: string;
 }
 
+// Interface para Asiento Contable
+export interface AsientoContable {
+  id: string;
+  empresa_id: number;
+  empresa_nombre: string;
+  periodo: string;
+  ano: number;
+  mes: number;
+  quincena: number;
+  fecha_generacion: string;
+  // Datos del Debe (Gastos)
+  gasto_sueldos: number;
+  gasto_prestaciones: number;
+  gasto_intereses: number;
+  gasto_utilidades: number;
+  gasto_bono_vacacional: number;
+  total_debe: number;
+  // Datos del Haber (Acreedores)
+  neto_pagar_banco: number;
+  ivss_trabajador_por_pagar: number;
+  ivss_patronal_por_pagar: number;
+  faov_trabajador_por_pagar: number;
+  faov_patronal_por_pagar: number;
+  spf_por_pagar: number;
+  inces_por_pagar: number;
+  aportes_especiales_por_pagar: number;
+  total_haber: number;
+  // Detalle por empleado
+  empleados: {
+    empleado_id: number;
+    nombre: string;
+    cedula: string;
+    sueldo_base: number;
+    neto_pagar: number;
+  }[];
+}
+
 interface AppState {
   // Autenticación
   usuario: Usuario | null;
@@ -204,12 +241,14 @@ interface AppState {
   
   // Batch processing (Lote de espera)
   loteEspera: LoteEspera[];
+  asientosContables: AsientoContable[];
+  ultimoAsiento: AsientoContable | null;
   addToLoteEspera: (item: LoteEspera) => void;
   updateInLoteEspera: (empleadoId: number, liquidacion: Liquidacion) => void;
   removeFromLoteEspera: (empleadoId: number) => void;
   generateBatchFromCompany: (empresaId: number, empleados: Empleado[], empresas: Empresa[], parametros: Parametros, tasaCambio: number) => void;
   clearLoteEspera: () => void;
-  processLoteCompleto: () => Liquidacion[];
+  processLoteCompleto: (aportesEspeciales?: number) => { liquidaciones: Liquidacion[]; asiento: AsientoContable | null };
   
   // Utilidades
   login: (username: string, password: string) => Promise<boolean>;
@@ -249,6 +288,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   historialTasasCambio: [],
   auditoriaCambiosTasas: [],
   loteEspera: [],
+  asientosContables: [],
+  ultimoAsiento: null,
   
   // Acciones
   setUsuario: (usuario) => set({ usuario, isAuthenticated: !!usuario }),
@@ -597,12 +638,99 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loteEspera: [] });
   },
   
-  processLoteCompleto: () => {
-    const { loteEspera } = get();
+  processLoteCompleto: (aportesEspeciales = 0) => {
+    const { loteEspera, parametros, tasaCambio, empresas } = get();
+    
+    if (loteEspera.length === 0) {
+      return { liquidaciones: [], asiento: null };
+    }
+    
     const liquidaciones = loteEspera.map(l => l.liquidacion);
-    // Limpiar lote después de procesar
-    set({ loteEspera: [] });
-    return liquidaciones;
+    
+    // Obtener la empresa del primer empleado
+    const primeraLiquidacion = liquidaciones[0];
+    const empresa = empresas.find(e => e.id === primeraLiquidacion.empresa_id);
+    const nombreEmpresa = empresa?.nombre || 'Empresa Desconocida';
+    
+    // Calcular totales de nómina
+    const totalSueldoBase = liquidaciones.reduce((sum, l) => sum + l.sueldo_base, 0);
+    const totalNetoPagar = liquidaciones.reduce((sum, l) => sum + l.neto_pagar, 0);
+    const totalIvssTrabajador = liquidaciones.reduce((sum, l) => sum + l.ivss_trabajador, 0);
+    const totalFaovTrabajador = liquidaciones.reduce((sum, l) => sum + l.faov_trabajador, 0);
+    const totalInces = liquidaciones.reduce((sum, l) => sum + (l.inces_trabajador || 0), 0);
+    
+    // Calcular provisiones laborales (Art. 142, Intereses, Utilidades, Bono Vacacional)
+    const diasMes = 30;
+    const diarioSueldo = totalSueldoBase / diasMes;
+    const tasaActiva = parametros.tasa_activa / 100;
+    
+    // Garantía de Prestaciones (Art. 142a): 5 días por mes (15 días/trimestre)
+    const garantiaPrestaciones = diarioSueldo * 5;
+    
+    // Intereses sobre Prestaciones (tasa activa BCV)
+    const interesesPrestaciones = garantiaPrestaciones * tasaActiva / 12;
+    
+    // Alícuota de Utilidades (30 días al año = 2.5 días/mes)
+    const aliCuotaUtilidades = diarioSueldo * 2.5;
+    
+    // Alícuota de Bono Vacacional (15 días al año = 1.25 días/mes)
+    const aliCuotaBonoVacacional = diarioSueldo * 1.25;
+    
+    // Calcular aportes patronales
+    const ivssPatronal = totalSueldoBase * 0.07; // 7% employer
+    const faovPatronal = totalSueldoBase * 0.01; // 1% employer
+    const spfPatronal = totalSueldoBase * 0.02; // 2% SPF (default)
+    const incesPatronal = empresa?.es_inces_contribuyente && loteEspera.length >= 5 
+      ? totalSueldoBase * 0.02 
+      : 0; // 2% INCES
+    
+    // Generar el asiento contable
+    const asiento: AsientoContable = {
+      id: `ASiento-${Date.now()}`,
+      empresa_id: primeraLiquidacion.empresa_id,
+      empresa_nombre: nombreEmpresa,
+      periodo: primeraLiquidacion.periodo,
+      ano: primeraLiquidacion.ano,
+      mes: primeraLiquidacion.mes,
+      quincena: primeraLiquidacion.quincena,
+      fecha_generacion: new Date().toISOString(),
+      // DEBE: Gastos
+      gasto_sueldos: totalSueldoBase,
+      gasto_prestaciones: garantiaPrestaciones,
+      gasto_intereses: interesesPrestaciones,
+      gasto_utilidades: aliCuotaUtilidades,
+      gasto_bono_vacacional: aliCuotaBonoVacacional,
+      total_debe: totalSueldoBase + garantiaPrestaciones + interesesPrestaciones + aliCuotaUtilidades + aliCuotaBonoVacacional,
+      // HABER: Acreedores
+      neto_pagar_banco: totalNetoPagar,
+      ivss_trabajador_por_pagar: totalIvssTrabajador,
+      ivss_patronal_por_pagar: ivssPatronal,
+      faov_trabajador_por_pagar: totalFaovTrabajador,
+      faov_patronal_por_pagar: faovPatronal,
+      spf_por_pagar: spfPatronal,
+      inces_por_pagar: incesPatronal,
+      aportes_especiales_por_pagar: aportesEspeciales,
+      total_haber: totalNetoPagar + totalIvssTrabajador + ivssPatronal + totalFaovTrabajador + faovPatronal + spfPatronal + incesPatronal + aportesEspeciales,
+      // Detalle por empleado
+      empleados: loteEspera.map(l => ({
+        empleado_id: l.empleado_id,
+        nombre: l.empleado_nombre,
+        cedula: l.empleado_cedula,
+        sueldo_base: l.liquidacion.sueldo_base,
+        neto_pagar: l.liquidacion.neto_pagar
+      }))
+    };
+    
+    // Guardar el asiento contable
+    const { asientosContables } = get();
+    set({ 
+      loteEspera: [],
+      liquidaciones: [...get().liquidaciones, ...liquidaciones],
+      asientosContables: [...asientosContables, asiento],
+      ultimoAsiento: asiento
+    });
+    
+    return { liquidaciones, asiento };
   },
   
   // Gestión de empleados

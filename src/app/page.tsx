@@ -1709,10 +1709,12 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     
     setProcesando(true);
     
-    // Obtener liquidaciones del lote y guardarlas
-    const liquidacionesLote = processLoteCompleto();
-    setLiquidaciones(liquidacionesLote);
-    setSuccessMessage(`Nómina general procesada: ${liquidacionesLote.length} empleado(s) guardado(s) en el historial`);
+    // Obtener liquidaciones del lote y guardarlas junto con el asiento contable
+    const resultado = processLoteCompleto(0);
+    setLiquidaciones(resultado.liquidaciones);
+    
+    // Mostrar mensaje
+    setSuccessMessage(`Nómina general procesada: ${resultado.liquidaciones.length} empleado(s) guardado(s) en el historial`);
     
     // Regenerar lote para el siguiente período
     generateBatchFromCompany(empresaSeleccionada, empleados, empresas, parametros, tasaCambio);
