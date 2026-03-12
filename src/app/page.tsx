@@ -1296,7 +1296,7 @@ function EmpleadosView({ mostrarEnBs, empresaId }: { mostrarEnBs: boolean; empre
                   <td className="px-4 py-3 text-neutral-300">{empresa?.nombre || 'N/A'}</td>
                   <td className="px-4 py-3 text-neutral-300">{empleado.cargo || '-'}</td>
                   <td className="px-4 py-3 text-white font-medium">{mostrarEnBs ? "Bs. " : "$"}{mostrarEnBs 
-                    ? (empleado.tipo_moneda_sueldo === "USD" ? (empleado.sueldo_base * tasaCambio).toFixed(2) : (empleado.sueldo_base * tasaCambio).toFixed(2))
+                    ? (empleado.tipo_moneda_sueldo === "USD" ? (empleado.sueldo_base * tasaCambio).toFixed(2) : empleado.sueldo_base.toFixed(2))
                     : (empleado.tipo_moneda_sueldo === "USD" ? empleado.sueldo_base.toFixed(2) : (empleado.sueldo_base / tasaCambio).toFixed(2))
                   }</td>
                   <td className="px-4 py-3">

@@ -1,23 +1,27 @@
-# Active Context: Next.js Starter Template
+# Active Context: Sistema de Nómina Venezuela
 
 ## Current State
 
-**Template Status**: ✅ Ready for development
+**Project Status**: ✅ Sistema de nómina en funcionamiento
 
-The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. It's ready for AI-assisted expansion to build any type of application.
+Sistema de nómina para Venezuela con soporte para:
+- Gestión de empresas y empleados
+- Cálculo de nómina quincenal (15 días)
+- Deducciones legales (IVSS, RPE, FAOV, INCES)
+- Beneficios (bono vacacional, utilidades)
+- Conversión USD/VES con tasa BCV
 
 ## Recently Completed
 
-- [x] Base Next.js 16 setup with App Router
-- [x] TypeScript configuration with strict mode
-- [x] Tailwind CSS 4 integration
-- [x] ESLint configuration
-- [x] Memory bank documentation
-- [x] Recipe system for common features
-- [x] Force Webpack: Disable Turbopack for CPU compatibility
-- [x] Fix: Restore standard Next.js config, use port 8080 for Kilo compatibility
+- [x] Corrección de lógica de conversión de sueldo en Personal:
+  - Si tipo_moneda_sueldo='USD': multiplica por tasaBCV para mostrar en Bs
+  - Si tipo_moneda_sueldo='VES': muestra valor literal sin conversión
+- [x] Ajuste de fórmula de nómina: (sueldo_literal / 30) * dias_periodo
+  - Ejemplo: 130 Bs / 30 * 15 días = 65 Bs
 
-## Current Structure
+## Current Focus
+
+Módulo de Personal y Nómina - Cálculos de sueldo y conversión de moneda
 
 | File/Directory | Purpose | Status |
 |----------------|---------|--------|
@@ -87,3 +91,5 @@ export async function GET() {
 | Date | Changes |
 |------|---------|
 | Initial | Template created with base setup |
+| 2026-03-12 | Corrección lógica conversión BCV - Sueldo VES ahora es literal (no multiplica por tasa) |
+| 2026-03-12 | Ajuste fórmula nómina: (sueldo/30)*dias para que 130Bs*15días=65Bs |

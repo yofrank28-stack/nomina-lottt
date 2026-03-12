@@ -615,9 +615,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     
     // Generar liquidación base para cada empleado
     const lote: LoteEspera[] = empleadosEmpresa.map(emp => {
-      // Convertir sueldo a USD si está en VES
-      const sueldoBaseUSD = emp.tipo_moneda_sueldo === 'VES' 
-        ? emp.sueldo_base / tasaCambio 
+      // Convertir sueldo a VES si está en USD para cálculos de nómina
+      const sueldoBaseVES = emp.tipo_moneda_sueldo === 'USD' 
+        ? emp.sueldo_base * tasaCambio 
         : emp.sueldo_base;
       
       // === PRORRATEO POR FECHA DE INGRESO ===
@@ -644,7 +644,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       // === FÓRMULA CORREGIDA: SUELDO DEL PERÍODO ===
       // Sueldo Base / 30 * Días Trabajados
-      const sueldoPeriodo = (sueldoBaseUSD / 30) * diasLaborados;
+      const sueldoPeriodo = (sueldoBaseVES / 30) * diasLaborados;
       
       // === BENEFICIOS INDIVIDUALES ===
       // Solo si el empleado tiene el flag individual habilitado
@@ -657,7 +657,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // 1.25 días por mes trabajado
         const mesesTrabajados = (ano - fechaIngreso.getFullYear()) * 12 + (mes - fechaIngreso.getMonth() - 1);
         const diasVacaciones = Math.max(0, Math.min(mesesTrabajados * 1.25, 15)); // Máximo 15 días
-        const sueldoDiario = (sueldoBaseUSD * 12) / 360;
+        const sueldoDiario = (sueldoBaseVES * 12) / 360;
         bonoVacacional = Math.round(sueldoDiario * diasVacaciones * 100) / 100;
       }
       
@@ -665,7 +665,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       let utilidad = 0;
       if (tieneUtilidades) {
         // 15% del salario por día trabajado
-        utilidad = Math.round((sueldoBaseUSD / 30 * diasLaborados) * 0.15 * 100) / 100;
+        utilidad = Math.round((sueldoBaseVES / 30 * diasLaborados) * 0.15 * 100) / 100;
       }
       
       // Bono Transporte y Cesta Ticket (solo en 2da quincena - aquí es 1ra)
@@ -678,7 +678,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       // === DEDUCCIONES ===
       // IVSS (4%): cálculo semanal
-      const semanal = (sueldoBaseUSD * 12) / 52;
+      const semanal = (sueldoBaseVES * 12) / 52;
       const topeSemanal = (parametros.salario_minimo * 5 * 12) / 52;
       const baseCalculo = Math.min(semanal, topeSemanal);
       const ivss = Math.round(baseCalculo * 0.04 * lunes * 100) / 100;
@@ -687,7 +687,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const rpe = Math.round(baseCalculo * 0.005 * lunes * 100) / 100;
       
       // FAOV (1%)
-      const faov = Math.round(sueldoBaseUSD * 0.01 * 100) / 100;
+      const faov = Math.round(sueldoBaseVES * 0.01 * 100) / 100;
       
       // INCES (2% only if >= 5 employees)
       const inces = empresa.es_inces_contribuyente && empleadosEmpresa.length >= 5 
@@ -708,7 +708,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         quincena: 1,
         dias_trabajados: diasLaborados,
         lunes_periodo: lunes,
-        sueldo_base: Math.round(sueldoBaseUSD * 100) / 100,
+        sueldo_base: Math.round(sueldoBaseVES * 100) / 100,
         bono_vacacional: bonoVacacional,
         utilidades: utilidad,
         otras_asignaciones: bonoTransporte + cestaTicket,
