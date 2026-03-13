@@ -1568,11 +1568,53 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   };
   
   // Función para formatear números con formato regional (punto miles, coma decimales)
+  // Usa Intl.NumberFormat('es-VE') para cumplimiento strict
   const formatearNumero = (valor: number): string => {
-    return valor.toLocaleString('es-VE', {
+    return new Intl.NumberFormat('es-VE', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    });
+    }).format(valor);
+  };
+  
+  // ============================================================
+  // FUNCIÓN: saveIndividualRecord()
+  // Guarda asignaciones/deducciones manuales del empleado individual
+  // ============================================================
+  const saveIndividualRecord = (empleadoId: number) => {
+    const item = loteEspera.find(l => l.empleado_id === empleadoId);
+    if (item) {
+      const emp = empleados.find(e => e.id === empleadoId);
+      const sb = emp?.sueldo_base || 0;
+      
+      const totalAsigManual = conceptosAsignaciones
+        .filter(c => c.activo)
+        .reduce((sum, c) => {
+          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+          return sum;
+        }, 0);
+      
+      const totalDedManual = conceptosDeducciones
+        .filter(c => c.activo)
+        .reduce((sum, c) => {
+          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+          return sum;
+        }, 0);
+      
+      const liquidacionActualizada = {
+        ...item.liquidacion,
+        otras_asignaciones: Math.round(totalAsigManual * 100) / 100,
+        otras_deducciones: Math.round(totalDedManual * 100) / 100,
+        total_asignaciones: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual) * 100) / 100,
+        total_deducciones: Math.round((item.liquidacion.ivss_trabajador + item.liquidacion.rpe_trabajador + item.liquidacion.faov_trabajador + item.liquidacion.inces_trabajador + totalDedManual) * 100) / 100,
+        neto_pagar: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100,
+        monto_bs: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100
+      };
+      
+      updateInLoteEspera(empleadoId, liquidacionActualizada);
+      setSuccessMessage(`✓ Registro individual guardado: ${item.empleado_nombre} | Asig: Bs. ${formatearNumero(totalAsigManual)} | Deduc: Bs. ${formatearNumero(totalDedManual)}`);
+    }
   };
   
   // Estados para beneficios individuales por trabajador - derivados del empleado seleccionado
@@ -2428,11 +2470,12 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => guardarRegistroIndividual(item.empleado_id)}
-                          className="p-1 hover:bg-green-600 rounded text-neutral-400 hover:text-white"
-                          title="Guardar Registro Individual"
+                          onClick={() => saveIndividualRecord(item.empleado_id)}
+                          className="flex items-center gap-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-medium"
+                          title="GUARDAR CAMBIOS INDIVIDUAL"
                         >
-                          <Save className="w-4 h-4" />
+                          <Save className="w-3 h-3" />
+                          GUARDAR
                         </button>
                         <button
                           onClick={() => {

@@ -13,22 +13,12 @@ Sistema de nómina para Venezuela con soporte para:
 
 ## Recently Completed
 
-- [x] Corrección de lógica de conversión de sueldo en Personal:
-  - Si tipo_moneda_sueldo='USD': multiplica por tasaBCV para mostrar en Bs
-  - Si tipo_moneda_sueldo='VES': muestra valor literal sin conversión
-- [x] Ajuste de fórmula de nómina: (sueldo_literal / 30) * dias_periodo
-  - Ejemplo: 130 Bs / 30 * 15 días = 65 Bs
-- [x] Reconfiguración módulo Procesar Nómina:
-  - Sincronización Total: Sueldo Base muestra valor literal (VES=130 → 130)
-  - Entrada Manual Individual: Campos de Asignaciones/Deducciones adicionales habilitados
-  - Botones de Guardado Dual: Botón "Guardar Registro Individual" en cada tarjeta + "Guardar Todos"
-  - Acciones por Lote: Checkboxes + botón "Aplicar a Selección" para asignaciones/deducciones
-- [x] Correcciones cálculo quincenal:
-  - Sueldo Base en recibo = mensual/2 (130 Bs → 65 Bs quincena)
-  - Eliminado multiplicación por tasa BCV en montos VES
-  - Total Asignaciones = Sueldo Quincenal + Asignaciones Manuales
-- [x] Guardado Individual: Botón guarda asignaciones/deducciones sin borrar al cambiar de empleado
-- [x] Formato Numérico Regional: Punto como miles, coma como decimales (Bs. 1.000,00)
+- [x] REWRITE COMPLETO Controlador Nómina:
+  - VAR SueldoMensual = Valor de 'Sueldo Base' en Personal
+  - CALC SueldoQuincena = SueldoMensual / 2 (130 → 65)
+  - BLOQUEO BCV: Si Moneda=='VES', Multiplicador=1 (PROHIBIDO 36,15)
+  - FORMATO: Intl.NumberFormat('es-VE') → punto miles, coma decimales
+  - PERSISTENCIA: Función saveIndividualRecord() con botón naranja "GUARDAR CAMBIOS INDIVIDUAL"
 
 ## Current Focus
 
@@ -107,3 +97,4 @@ export async function GET() {
 | 2026-03-13 | Reconfiguración módulo Nómina: Sincronización total, entrada manual, botones duales, acciones por lote |
 | 2026-03-13 | Corrección cálculo quincenal: Sueldo Base = monthly/2 (130→65 Bs), eliminada conversión automática |
 | 2026-03-13 | Guardado Individual mejorado, formato numérico regional (punto miles, coma decimales) |
+| 2026-03-13 | REWRITE completo nómina: SueldoQuincena=SueldoMensual/2, BLOQUEO BCV=1 para VES, Intl.NumberFormat('es-VE'), saveIndividualRecord() |
