@@ -1525,11 +1525,54 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   };
   
   // Función para guardar empleado individual desde el lote
+  // Guarda las asignaciones y deducciones manuales sin borrar al cambiar de empleado
   const guardarRegistroIndividual = (empleadoId: number) => {
     const item = loteEspera.find(l => l.empleado_id === empleadoId);
     if (item) {
-      setSuccessMessage(`Registro individual guardado: ${item.empleado_nombre}`);
+      // Calcular totales de conceptos manuales activos
+      const emp = empleados.find(e => e.id === empleadoId);
+      const sb = emp?.sueldo_base || 0;
+      
+      // Calcular asignaciones manuales
+      const totalAsigManual = conceptosAsignaciones
+        .filter(c => c.activo)
+        .reduce((sum, c) => {
+          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+          return sum;
+        }, 0);
+      
+      // Calcular deducciones manuales
+      const totalDedManual = conceptosDeducciones
+        .filter(c => c.activo)
+        .reduce((sum, c) => {
+          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+          return sum;
+        }, 0);
+      
+      // Actualizar la liquidación del empleado en el lote
+      const liquidacionActualizada = {
+        ...item.liquidacion,
+        otras_asignaciones: Math.round(totalAsigManual * 100) / 100,
+        otras_deducciones: Math.round(totalDedManual * 100) / 100,
+        total_asignaciones: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual) * 100) / 100,
+        total_deducciones: Math.round((item.liquidacion.ivss_trabajador + item.liquidacion.rpe_trabajador + item.liquidacion.faov_trabajador + item.liquidacion.inces_trabajador + totalDedManual) * 100) / 100,
+        neto_pagar: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100,
+        monto_bs: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100
+      };
+      
+      updateInLoteEspera(empleadoId, liquidacionActualizada);
+      setSuccessMessage(`Registro individual guardado: ${item.empleado_nombre} - Asig: Bs. ${totalAsigManual.toFixed(2)}, Deduc: Bs. ${totalDedManual.toFixed(2)}`);
     }
+  };
+  
+  // Función para formatear números con formato regional (punto miles, coma decimales)
+  const formatearNumero = (valor: number): string => {
+    return valor.toLocaleString('es-VE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   };
   
   // Estados para beneficios individuales por trabajador - derivados del empleado seleccionado
@@ -2302,19 +2345,19 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
               <p className="text-xs text-neutral-400">Total Asignaciones</p>
               <p className="text-lg font-bold text-green-400">
-                {mostrarEnBs ? `Bs. ${totalLoteAsignaciones.toFixed(2)}` : `${totalLoteAsignaciones.toFixed(2)}`}
+                {mostrarEnBs ? `Bs. ${formatearNumero(totalLoteAsignaciones)}` : formatearNumero(totalLoteAsignaciones)}
               </p>
             </div>
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
               <p className="text-xs text-neutral-400">Total Deducciones</p>
               <p className="text-lg font-bold text-red-400">
-                {mostrarEnBs ? `Bs. ${totalLoteDeducciones.toFixed(2)}` : `${totalLoteDeducciones.toFixed(2)}`}
+                {mostrarEnBs ? `Bs. ${formatearNumero(totalLoteDeducciones)}` : formatearNumero(totalLoteDeducciones)}
               </p>
             </div>
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
               <p className="text-xs text-neutral-400">Total Neto</p>
               <p className="text-lg font-bold text-white">
-                {mostrarEnBs ? `Bs. ${totalLoteBs.toFixed(2)}` : `${totalLoteNeto.toFixed(2)}`}
+                {mostrarEnBs ? `Bs. ${formatearNumero(totalLoteBs)}` : formatearNumero(totalLoteNeto)}
               </p>
             </div>
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
@@ -2360,26 +2403,26 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                     <td className="px-3 py-2 text-white">{item.empleado_nombre}</td>
                     <td className="px-3 py-2 text-right text-neutral-300">
                       {mostrarEnBs 
-                        ? `Bs. ${item.liquidacion.sueldo_base.toFixed(2)}`
-                        : `$${(item.liquidacion.sueldo_base / tasaCambio).toFixed(2)}`
+                        ? `Bs. ${formatearNumero(item.liquidacion.sueldo_base)}`
+                        : `$${formatearNumero(item.liquidacion.sueldo_base / tasaCambio)}`
                       }
                     </td>
                     <td className="px-3 py-2 text-right text-green-400">
                       {mostrarEnBs 
-                        ? `Bs. ${item.liquidacion.total_asignaciones.toFixed(2)}`
-                        : `${item.liquidacion.total_asignaciones.toFixed(2)}`
+                        ? `Bs. ${formatearNumero(item.liquidacion.total_asignaciones)}`
+                        : formatearNumero(item.liquidacion.total_asignaciones)
                       }
                     </td>
                     <td className="px-3 py-2 text-right text-red-400">
                       {mostrarEnBs 
-                        ? `Bs. ${item.liquidacion.total_deducciones.toFixed(2)}`
-                        : `${item.liquidacion.total_deducciones.toFixed(2)}`
+                        ? `Bs. ${formatearNumero(item.liquidacion.total_deducciones)}`
+                        : formatearNumero(item.liquidacion.total_deducciones)
                       }
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-white">
                       {mostrarEnBs 
-                        ? `Bs. ${item.liquidacion.monto_bs.toFixed(2)}`
-                        : `${item.liquidacion.neto_pagar.toFixed(2)}`
+                        ? `Bs. ${formatearNumero(item.liquidacion.monto_bs)}`
+                        : formatearNumero(item.liquidacion.neto_pagar)
                       }
                     </td>
                     <td className="px-3 py-2 text-center">
