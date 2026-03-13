@@ -29,6 +29,12 @@ Sistema de nómina para Venezuela con soporte para:
 - [x] Corrección procesarNomina: Lógica dinámica desde Personal, no sobreescribe ediciones
 - [x] Reparación persistencia: Eliminado reset de conceptos al cambiar de empleado
 - [x] Sincronización recibo: Datos leídos directamente de Nomina_Procesada (loteEspera)
+- [x] REDISEÑO SAAS MULTIEMPRESA:
+  - Widget Tasas del Día: Tasa BCV + Tasa Activa Prestaciones
+  - Dashboard Master: Métricas Binance/Zinli/Pago Móvil/Pendientes
+  - Tabla de empresas con semáforo de licencias (active/suspended/terminated)
+  - Diseño Dark Mode con verde esmeralda y naranja financiero
+  - Entorno visualmente aislado por empresa
 
 ## Current Focus
 

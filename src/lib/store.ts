@@ -233,6 +233,14 @@ interface AppState {
   error: string | null;
   successMessage: string | null;
   
+  // Métricas de Pagos (Dashboard Master)
+  metricasPagos: {
+    binance: number;
+    zinli: number;
+    pagoMovil: number;
+    pendientes: number;
+  };
+  
   // Tasa BCV
   tasaCambio: number;
   tasaActiva: number;  // Tasa activa para prestaciones sociales
@@ -256,6 +264,7 @@ interface AppState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setSuccessMessage: (message: string | null) => void;
+  setMetricasPagos: (metricas: { binance?: number; zinli?: number; pagoMovil?: number; pendientes?: number }) => void;
   setTasaCambio: (tasa: number) => void;
   setTasaActiva: (tasa: number) => void;
   guardarTasaActiva: (ano: number, mes: number, tasa: number, descripcion?: string) => void;
@@ -327,6 +336,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   loading: false,
   error: null,
   successMessage: null,
+  metricasPagos: {
+    binance: 0,
+    zinli: 0,
+    pagoMovil: 0,
+    pendientes: 0
+  },
   tasaCambio: 443.26,  // Tasa BCV actualizada al 13/03/2026
   tasaActiva: 60.00,
   historialTasasActivas: [],
@@ -389,6 +404,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   setSuccessMessage: (successMessage) => set({ successMessage }),
+  setMetricasPagos: (metricas: { binance?: number; zinli?: number; pagoMovil?: number; pendientes?: number }) => set((state) => ({ 
+    metricasPagos: { ...state.metricasPagos, ...metricas } 
+  })),
   setTasaCambio: (tasaCambio) => set({ tasaCambio }),
   setTasaActiva: (tasaActiva) => set({ tasaActiva }),
   
