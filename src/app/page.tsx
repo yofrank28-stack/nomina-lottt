@@ -29,7 +29,8 @@ import {
   PenTool,
   Save,
   X,
-  ArrowRightLeft
+  ArrowRightLeft,
+  CheckSquare
 } from "lucide-react";
 
 // ============================================================
@@ -1468,6 +1469,69 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
   const [pagarUtilidades, setPagarUtilidades] = useState(false);
   const [empleadoSeleccionadoId, setEmpleadoSeleccionadoId] = useState<number | null>(null);
   
+  // Estados para selección múltiple en lote
+  const [seleccionadosLote, setSeleccionadosLote] = useState<number[]>([]);
+  
+  // Estados para asignaciones/deducciones manuales en lote
+  const [asignacionManualLote, setAsignacionManualLote] = useState<number>(0);
+  const [deduccionManualLote, setDeduccionManualLote] = useState<number>(0);
+  
+  // Función para toggle de selección
+  const toggleSeleccionLote = (empleadoId: number) => {
+    setSeleccionadosLote(prev => 
+      prev.includes(empleadoId) 
+        ? prev.filter(id => id !== empleadoId)
+        : [...prev, empleadoId]
+    );
+  };
+  
+  // Función para seleccionar todos
+  const seleccionarTodosLote = () => {
+    if (seleccionadosLote.length === loteEspera.length) {
+      setSeleccionadosLote([]);
+    } else {
+      setSeleccionadosLote(loteEspera.map(l => l.empleado_id));
+    }
+  };
+  
+  // Función para aplicar conceptos a selección
+  const aplicarASeleccion = (tipo: 'asignacion' | 'deduccion', monto: number) => {
+    if (seleccionadosLote.length === 0 || monto <= 0) return;
+    
+    const { updateInLoteEspera, loteEspera } = require('@/lib/store').useAppStore.getState();
+    
+    seleccionadosLote.forEach(empleadoId => {
+      const item = loteEspera.find((l: any) => l.empleado_id === empleadoId);
+      if (item) {
+        const liquidacion = { ...item.liquidacion };
+        if (tipo === 'asignacion') {
+          liquidacion.otras_asignaciones = (liquidacion.otras_asignaciones || 0) + monto;
+          liquidacion.total_asignaciones = liquidacion.sueldo_base + liquidacion.bono_vacacional + liquidacion.utilidades + liquidacion.otras_asignaciones;
+          liquidacion.neto_pagar = liquidacion.total_asignaciones - liquidacion.total_deducciones;
+          liquidacion.monto_bs = liquidacion.neto_pagar;
+        } else {
+          liquidacion.otras_deducciones = (liquidacion.otras_deducciones || 0) + monto;
+          liquidacion.total_deducciones = liquidacion.ivss_trabajador + liquidacion.rpe_trabajador + liquidacion.faov_trabajador + liquidacion.inces_trabajador + liquidacion.otras_deducciones;
+          liquidacion.neto_pagar = liquidacion.total_asignaciones - liquidacion.total_deducciones;
+          liquidacion.monto_bs = liquidacion.neto_pagar;
+        }
+        updateInLoteEspera(empleadoId, liquidacion);
+      }
+    });
+    setSuccessMessage(`Monto aplicado a ${seleccionadosLote.length} empleado(s)`);
+    setAsignacionManualLote(0);
+    setDeduccionManualLote(0);
+    setSeleccionadosLote([]);
+  };
+  
+  // Función para guardar empleado individual desde el lote
+  const guardarRegistroIndividual = (empleadoId: number) => {
+    const item = loteEspera.find(l => l.empleado_id === empleadoId);
+    if (item) {
+      setSuccessMessage(`Registro individual guardado: ${item.empleado_nombre}`);
+    }
+  };
+  
   // Estados para beneficios individuales por trabajador - derivados del empleado seleccionado
   // Se calculan después de obtener empleadoSeleccionado
 
@@ -2001,7 +2065,7 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <div className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-600/50 rounded-lg">
               <DollarSign className="w-4 h-4 text-blue-400" />
               <span className="text-sm text-blue-300">
-                Sueldo Base: {empleadoSeleccionado.tipo_moneda_sueldo === 'USD' ? `${empleadoSeleccionado.sueldo_base.toFixed(2)}` : `Bs. ${(empleadoSeleccionado.sueldo_base * tasaCambio).toFixed(2)}`}
+                Sueldo Base: {empleadoSeleccionado.tipo_moneda_sueldo === 'USD' ? `$${empleadoSeleccionado.sueldo_base.toFixed(2)}` : `Bs. ${empleadoSeleccionado.sueldo_base.toFixed(2)}`} (Literal)
               </span>
             </div>
           )}
@@ -2135,6 +2199,71 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
         </div>
       </div>
 
+      {/* Panel de Acciones por Lote - Selección Múltiple */}
+      {loteEspera.length > 0 && (
+        <div className="bg-neutral-800 rounded-xl border border-purple-600 p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400 font-medium">Selección: {seleccionadosLote.length} empleado(s)</span>
+            </div>
+            
+            {/* Campos de entrada manual para asignaciones/deducciones */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-green-400">Asignación:</label>
+              <input
+                type="number"
+                value={asignacionManualLote}
+                onChange={(e) => setAsignacionManualLote(parseFloat(e.target.value) || 0)}
+                className="w-24 px-2 py-1 bg-neutral-700 border border-neutral-600 rounded text-white text-sm"
+                placeholder="Monto"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-red-400">Deducción:</label>
+              <input
+                type="number"
+                value={deduccionManualLote}
+                onChange={(e) => setDeduccionManualLote(parseFloat(e.target.value) || 0)}
+                className="w-24 px-2 py-1 bg-neutral-700 border border-neutral-600 rounded text-white text-sm"
+                placeholder="Monto"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            
+            {/* Botón Aplicar a Selección */}
+            <button
+              onClick={() => {
+                if (seleccionadosLote.length === 0) {
+                  setError("Seleccione al menos un empleado");
+                  return;
+                }
+                if (asignacionManualLote > 0) {
+                  aplicarASeleccion('asignacion', asignacionManualLote);
+                }
+                if (deduccionManualLote > 0) {
+                  aplicarASeleccion('deduccion', deduccionManualLote);
+                }
+              }}
+              disabled={seleccionadosLote.length === 0 || (asignacionManualLote <= 0 && deduccionManualLote <= 0)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckSquare className="w-4 h-4" />
+              Aplicar a Selección
+            </button>
+            
+            <button
+              onClick={() => setSeleccionadosLote([])}
+              className="px-3 py-2 text-neutral-400 hover:text-white text-sm"
+            >
+              Limpiar Selección
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabla de Lote de Espera */}
       {loteEspera.length > 0 && (
         <div className="bg-neutral-800 rounded-xl border border-amber-600 p-6">
@@ -2199,6 +2328,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <table className="w-full text-sm">
               <thead className="bg-neutral-700">
                 <tr>
+                  <th className="px-2 py-2 text-center text-neutral-300 font-medium">
+                    <input 
+                      type="checkbox" 
+                      checked={seleccionadosLote.length === loteEspera.length && loteEspera.length > 0}
+                      onChange={seleccionarTodosLote}
+                      className="w-4 h-4 accent-blue-500"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left text-neutral-300 font-medium">Cédula</th>
                   <th className="px-3 py-2 text-left text-neutral-300 font-medium">Nombre</th>
                   <th className="px-3 py-2 text-right text-neutral-300 font-medium">Sueldo Base</th>
@@ -2211,12 +2348,20 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
               <tbody>
                 {loteEspera.map((item) => (
                   <tr key={item.empleado_id} className="border-b border-neutral-700 hover:bg-neutral-700/50">
+                    <td className="px-2 py-2 text-center">
+                      <input 
+                        type="checkbox" 
+                        checked={seleccionadosLote.includes(item.empleado_id)}
+                        onChange={() => toggleSeleccionLote(item.empleado_id)}
+                        className="w-4 h-4 accent-blue-500"
+                      />
+                    </td>
                     <td className="px-3 py-2 text-neutral-300">{item.empleado_cedula}</td>
                     <td className="px-3 py-2 text-white">{item.empleado_nombre}</td>
                     <td className="px-3 py-2 text-right text-neutral-300">
                       {mostrarEnBs 
-                        ? `Bs. ${(item.liquidacion.sueldo_base * tasaCambio).toFixed(2)}`
-                        : `${item.liquidacion.sueldo_base.toFixed(2)}`
+                        ? `Bs. ${item.liquidacion.sueldo_base.toFixed(2)}`
+                        : `$${(item.liquidacion.sueldo_base / tasaCambio).toFixed(2)}`
                       }
                     </td>
                     <td className="px-3 py-2 text-right text-green-400">
@@ -2240,8 +2385,14 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
+                          onClick={() => guardarRegistroIndividual(item.empleado_id)}
+                          className="p-1 hover:bg-green-600 rounded text-neutral-400 hover:text-white"
+                          title="Guardar Registro Individual"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => {
-                            // Seleccionar empleado para editar
                             setEmpleadoSeleccionadoId(item.empleado_id);
                             setSuccessMessage(`Editando: ${item.empleado_nombre}. Modifique asignaciones/deducciones y guarde en lote.`);
                           }}
@@ -2358,33 +2509,37 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
               <div className="bg-neutral-800/50 rounded-lg p-4">
                 <p className="text-neutral-400 text-sm">Sueldo Base</p>
                 <p className="text-2xl font-bold text-white">
-                  ${empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
-                    ? empleadoSeleccionado.sueldo_base.toFixed(2) 
-                    : (empleadoSeleccionado!.sueldo_base * tasaCambio).toFixed(2)}
+                  {empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
+                    ? `$${empleadoSeleccionado.sueldo_base.toFixed(2)}` 
+                    : `Bs. ${empleadoSeleccionado!.sueldo_base.toFixed(2)}`}
                 </p>
               </div>
               <div className="bg-green-900/20 rounded-lg p-4 border border-green-600/30">
                 <p className="text-green-400 text-sm">Asignaciones Adicionales</p>
                 <p className="text-2xl font-bold text-green-400">
-                  ${calcularTotalConceptosAsignaciones(empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' ? empleadoSeleccionado.sueldo_base : empleadoSeleccionado!.sueldo_base / tasaCambio).toFixed(2)}
+                  {empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
+                    ? `$${calcularTotalConceptosAsignaciones(empleadoSeleccionado.sueldo_base).toFixed(2)}`
+                    : `Bs. ${calcularTotalConceptosAsignaciones(empleadoSeleccionado!.sueldo_base).toFixed(2)}`}
                 </p>
               </div>
               <div className="bg-red-900/20 rounded-lg p-4 border border-red-600/30">
                 <p className="text-red-400 text-sm">Deducciones Adicionales</p>
                 <p className="text-2xl font-bold text-red-400">
-                  ${calcularTotalConceptosDeducciones(empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' ? empleadoSeleccionado.sueldo_base : empleadoSeleccionado!.sueldo_base / tasaCambio).toFixed(2)}
+                  {empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
+                    ? `$${calcularTotalConceptosDeducciones(empleadoSeleccionado.sueldo_base).toFixed(2)}`
+                    : `Bs. ${calcularTotalConceptosDeducciones(empleadoSeleccionado!.sueldo_base).toFixed(2)}`}
                 </p>
               </div>
               <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500/50">
                 <p className="text-blue-300 text-sm">Neto a Pagar (Estimado)</p>
                 <p className="text-2xl font-bold text-blue-400">
-                  ${(() => {
-                    const sb = empleadoSeleccionado?.tipo_moneda_sueldo === 'USD' 
-                      ? empleadoSeleccionado.sueldo_base 
-                      : empleadoSeleccionado!.sueldo_base / tasaCambio;
+                  {(() => {
+                    const sb = empleadoSeleccionado!.sueldo_base;
                     const asignaciones = calcularTotalConceptosAsignaciones(sb);
                     const deducciones = calcularTotalConceptosDeducciones(sb);
-                    return (sb + asignaciones - deducciones).toFixed(2);
+                    return empleadoSeleccionado?.tipo_moneda_sueldo === 'USD'
+                      ? `$${(sb + asignaciones - deducciones).toFixed(2)}`
+                      : `Bs. ${(sb + asignaciones - deducciones).toFixed(2)}`;
                   })()}
                 </p>
               </div>

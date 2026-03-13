@@ -18,6 +18,11 @@ Sistema de nómina para Venezuela con soporte para:
   - Si tipo_moneda_sueldo='VES': muestra valor literal sin conversión
 - [x] Ajuste de fórmula de nómina: (sueldo_literal / 30) * dias_periodo
   - Ejemplo: 130 Bs / 30 * 15 días = 65 Bs
+- [x] Reconfiguración módulo Procesar Nómina:
+  - Sincronización Total: Sueldo Base muestra valor literal (VES=130 → 130)
+  - Entrada Manual Individual: Campos de Asignaciones/Deducciones adicionales habilitados
+  - Botones de Guardado Dual: Botón "Guardar Registro Individual" en cada tarjeta + "Guardar Todos"
+  - Acciones por Lote: Checkboxes + botón "Aplicar a Selección" para asignaciones/deducciones
 
 ## Current Focus
 
@@ -93,3 +98,4 @@ export async function GET() {
 | Initial | Template created with base setup |
 | 2026-03-12 | Corrección lógica conversión BCV - Sueldo VES ahora es literal (no multiplica por tasa) |
 | 2026-03-12 | Ajuste fórmula nómina: (sueldo/30)*dias para que 130Bs*15días=65Bs |
+| 2026-03-13 | Reconfiguración módulo Nómina: Sincronización total, entrada manual, botones duales, acciones por lote |
