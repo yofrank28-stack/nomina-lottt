@@ -27,6 +27,8 @@ Sistema de nómina para Venezuela con soporte para:
   - FAOV (1%): SueldoQuincena*0.01
 - [x] Corrección UI: Debug log + re-render forzado tras guardar
 - [x] Corrección procesarNomina: Lógica dinámica desde Personal, no sobreescribe ediciones
+- [x] Reparación persistencia: Eliminado reset de conceptos al cambiar de empleado
+- [x] Sincronización recibo: Datos leídos directamente de Nomina_Procesada (loteEspera)
 
 ## Current Focus
 

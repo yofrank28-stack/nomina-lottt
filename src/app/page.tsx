@@ -2150,12 +2150,8 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                 onChange={(e) => {
                   const val = e.target.value;
                   const nuevoId = val ? parseInt(val) : null;
-                  // Limpieza de seguridad: Si cambia de trabajador, limpiar conceptos para evitar cruce de datos
-                  if (nuevoId !== empleadoSeleccionadoId) {
-                    setConceptosAsignaciones([]);
-                    setConceptosDeducciones([]);
-                    setLiquidaciones([]);
-                  }
+                  // NO limpiar conceptos - mantener para persistencia
+                  // Los conceptos se guardan por empleado en el lote
                   setEmpleadoSeleccionadoId(nuevoId);
                 }}
                 className="px-4 py-2 bg-neutral-700 border border-neutral-600 rounded-lg text-white min-w-[250px] disabled:opacity-50"
