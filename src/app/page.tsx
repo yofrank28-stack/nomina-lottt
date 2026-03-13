@@ -1576,45 +1576,65 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
     }).format(valor);
   };
   
+  // Estado para forzar re-render después de guardar
+  const [refreshKey, setRefreshKey] = useState(0);
+  
   // ============================================================
   // FUNCIÓN: saveIndividualRecord()
   // Guarda asignaciones/deducciones manuales del empleado individual
   // ============================================================
   const saveIndividualRecord = (empleadoId: number) => {
+    console.log('[saveIndividualRecord] Iniciando guardado para empleadoId:', empleadoId);
+    
     const item = loteEspera.find(l => l.empleado_id === empleadoId);
-    if (item) {
-      const emp = empleados.find(e => e.id === empleadoId);
-      const sb = emp?.sueldo_base || 0;
-      
-      const totalAsigManual = conceptosAsignaciones
-        .filter(c => c.activo)
-        .reduce((sum, c) => {
-          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
-          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
-          return sum;
-        }, 0);
-      
-      const totalDedManual = conceptosDeducciones
-        .filter(c => c.activo)
-        .reduce((sum, c) => {
-          if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
-          if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
-          return sum;
-        }, 0);
-      
-      const liquidacionActualizada = {
-        ...item.liquidacion,
-        otras_asignaciones: Math.round(totalAsigManual * 100) / 100,
-        otras_deducciones: Math.round(totalDedManual * 100) / 100,
-        total_asignaciones: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual) * 100) / 100,
-        total_deducciones: Math.round((item.liquidacion.ivss_trabajador + item.liquidacion.rpe_trabajador + item.liquidacion.faov_trabajador + item.liquidacion.inces_trabajador + totalDedManual) * 100) / 100,
-        neto_pagar: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100,
-        monto_bs: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100
-      };
-      
-      updateInLoteEspera(empleadoId, liquidacionActualizada);
-      setSuccessMessage(`✓ Registro individual guardado: ${item.empleado_nombre} | Asig: Bs. ${formatearNumero(totalAsigManual)} | Deduc: Bs. ${formatearNumero(totalDedManual)}`);
+    if (!item) {
+      console.error('[saveIndividualRecord] No se encontró el empleado en loteEspera');
+      setError('ERROR: No se encontró el empleado en el lote');
+      return;
     }
+    
+    const emp = empleados.find(e => e.id === empleadoId);
+    const sb = emp?.sueldo_base || 0;
+    
+    console.log('[saveIndividualRecord] Empleado encontrado:', item.empleado_nombre, 'Sueldo base:', sb);
+    
+    const totalAsigManual = conceptosAsignaciones
+      .filter(c => c.activo)
+      .reduce((sum, c) => {
+        if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+        if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+        return sum;
+      }, 0);
+    
+    const totalDedManual = conceptosDeducciones
+      .filter(c => c.activo)
+      .reduce((sum, c) => {
+        if (c.tipo === 'MONTO_FIJO') return sum + c.valor;
+        if (c.tipo === 'PORCENTAJE') return sum + (sb * c.valor / 100);
+        return sum;
+      }, 0);
+    
+    const liquidacionActualizada = {
+      ...item.liquidacion,
+      otras_asignaciones: Math.round(totalAsigManual * 100) / 100,
+      otras_deducciones: Math.round(totalDedManual * 100) / 100,
+      total_asignaciones: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual) * 100) / 100,
+      total_deducciones: Math.round((item.liquidacion.ivss_trabajador + item.liquidacion.rpe_trabajador + item.liquidacion.faov_trabajador + item.liquidacion.inces_trabajador + totalDedManual) * 100) / 100,
+      neto_pagar: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100,
+      monto_bs: Math.round((item.liquidacion.sueldo_base + item.liquidacion.bono_vacacional + item.liquidacion.utilidades + totalAsigManual - item.liquidacion.ivss_trabajador - item.liquidacion.rpe_trabajador - item.liquidacion.faov_trabajador - item.liquidacion.inces_trabajador - totalDedManual) * 100) / 100
+    };
+    
+    console.log('[saveIndividualRecord] Actualizando loteEspera con ID:', empleadoId, 'Nuevos valores:', liquidacionActualizada);
+    
+    // Actualizar en el store
+    updateInLoteEspera(empleadoId, liquidacionActualizada);
+    
+    // Forzar re-render para actualizar la vista
+    setRefreshKey(prev => prev + 1);
+    
+    setSuccessMessage(`✓ GUARDADO: ${item.empleado_nombre} | Asig: Bs. ${formatearNumero(totalAsigManual)} | Deduc: Bs. ${formatearNumero(totalDedManual)}`);
+    
+    console.log('[saveIndividualRecord] Guardado completado, refreshKey:', refreshKey + 1);
   };
   
   // Estados para beneficios individuales por trabajador - derivados del empleado seleccionado

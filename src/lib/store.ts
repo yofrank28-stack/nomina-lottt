@@ -327,7 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loading: false,
   error: null,
   successMessage: null,
-  tasaCambio: 36.15,
+  tasaCambio: 443.26,  // Tasa BCV actualizada al 13/03/2026
   tasaActiva: 60.00,
   historialTasasActivas: [],
   historialTasasCambio: [],
@@ -677,20 +677,37 @@ export const useAppStore = create<AppState>((set, get) => ({
       const totalAsignaciones = Math.round((SueldoPeriodo + bonoVacacional + utilidad + bonoTransporte + cestaTicket) * 100) / 100;
       
       // === DEDUCCIONES ===
+      // ============================================================
+      // RECÁLCULO DE DEDUCCIONES DE LEY - Marzo 2026 (5 Lunes)
+      // Fórmula actualizada según instrucciones específicas:
+      // IVSS (4%): ((Sueldo Mensual * 12) / 52) * 0.04 * 5
+      // RPE (0.5%): ((Sueldo Mensual * 12) / 52) * 0.005 * 5
+      // FAOV (1%): Sueldo Quincenal * 0.01
+      // ============================================================
       const semanal = (SueldoEnBs * 12) / 52;
       const topeSemanal = (parametros.salario_minimo * 5 * 12) / 52;
       const baseCalculo = Math.min(semanal, topeSemanal);
-      const ivss = Math.round(baseCalculo * 0.04 * lunes * 100) / 100;
-      const rpe = Math.round(baseCalculo * 0.005 * lunes * 100) / 100;
-      const faov = Math.round(SueldoEnBs * 0.01 * 100) / 100;
+      
+      // IVSS (4%): ((Sueldo Mensual * 12) / 52) * 0.04 * 5
+      const ivss = Math.round((semanal * 0.04 * lunes) * 100) / 100;
+      
+      // RPE (0.5%): ((Sueldo Mensual * 12) / 52) * 0.005 * 5
+      const rpe = Math.round((semanal * 0.005 * lunes) * 100) / 100;
+      
+      // FAOV (1%): Sueldo Quincenal * 0.01
+      const faov = Math.round(SueldoQuincena * 0.01 * 100) / 100;
+      
       const inces = empresa.es_inces_contribuyente && empleadosEmpresa.length >= 5 
-        ? Math.round(baseCalculo * 0.02 * lunes * 100) / 100 
+        ? Math.round(semanal * 0.02 * lunes * 100) / 100 
         : 0;
       
       const totalDeducciones = Math.round((ivss + rpe + faov + inces) * 100) / 100;
       
       // === NETO A PAGAR ===
       const netoPagar = Math.round((totalAsignaciones - totalDeducciones) * 100) / 100;
+      
+      // === NETO USD (dividir neto Bs entre tasa BCV 443,26) ===
+      const netoUsd = Math.round((netoPagar / tasaCambio) * 100) / 100;
       
       const liquidacion: Liquidacion = {
         empleado_id: emp.id,

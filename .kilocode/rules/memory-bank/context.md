@@ -19,6 +19,13 @@ Sistema de nómina para Venezuela con soporte para:
   - BLOQUEO BCV: Si Moneda=='VES', Multiplicador=1 (PROHIBIDO 36,15)
   - FORMATO: Intl.NumberFormat('es-VE') → punto miles, coma decimales
   - PERSISTENCIA: Función saveIndividualRecord() con botón naranja "GUARDAR CAMBIOS INDIVIDUAL"
+- [x] Actualización Tasa BCV: 443,26 (13/03/2026)
+  - Neto USD = Neto Bs / 443,26
+- [x] Deducciones Ley Marzo 2026 (5 Lunes):
+  - IVSS (4%): ((Sueldo*12)/52)*0.04*5
+  - RPE (0.5%): ((Sueldo*12)/52)*0.005*5
+  - FAOV (1%): SueldoQuincena*0.01
+- [x] Corrección UI: Debug log + re-render forzado tras guardar
 
 ## Current Focus
 
@@ -98,3 +105,4 @@ export async function GET() {
 | 2026-03-13 | Corrección cálculo quincenal: Sueldo Base = monthly/2 (130→65 Bs), eliminada conversión automática |
 | 2026-03-13 | Guardado Individual mejorado, formato numérico regional (punto miles, coma decimales) |
 | 2026-03-13 | REWRITE completo nómina: SueldoQuincena=SueldoMensual/2, BLOQUEO BCV=1 para VES, Intl.NumberFormat('es-VE'), saveIndividualRecord() |
+| 2026-03-13 | Actualización tasa BCV=443,26, deducciones Ley Marzo 2026 (5 Lunes), debug+re-render tras guardar |
