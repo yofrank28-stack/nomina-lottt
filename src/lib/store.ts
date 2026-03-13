@@ -615,7 +615,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     
     // Generar liquidación base para cada empleado
     const lote: LoteEspera[] = empleadosEmpresa.map(emp => {
-      // Convertir sueldo a VES si está en USD para cálculos de nómina
+      // Sueldo base literal - sin conversión automática
+      // Si es VES: usar valor literal (130)
+      // Si es USD: convertir a VES (130 * tasa = 4699.50)
       const sueldoBaseVES = emp.tipo_moneda_sueldo === 'USD' 
         ? emp.sueldo_base * tasaCambio 
         : emp.sueldo_base;
@@ -642,9 +644,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Calcular antigüedad
       const anosAntiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
       
-      // === FÓRMULA CORREGIDA: SUELDO DEL PERÍODO ===
-      // Sueldo Base / 30 * Días Trabajados
-      const sueldoPeriodo = (sueldoBaseVES / 30) * diasLaborados;
+      // === CÁLCULO QUINCENAL: Sueldo Mensual / 30 * Días ===
+      // Ejemplo: 130 Bs / 30 * 15 días = 65 Bs (quincena)
+      const sueldoPeriodo = Math.round((sueldoBaseVES / 30) * diasLaborados * 100) / 100;
       
       // === BENEFICIOS INDIVIDUALES ===
       // Solo si el empleado tiene el flag individual habilitado
@@ -673,7 +675,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const cestaTicket = 0; // Solo 2da quincena
       
       // === TOTAL ASIGNACIONES ===
-      // CORREGIDO: Incluir SUELDO DEL PERÍODO
+      // = Sueldo Quincenal + Bono Vacacional + Utilidades + Otras Asignaciones
       const totalAsignaciones = Math.round((sueldoPeriodo + bonoVacacional + utilidad + bonoTransporte + cestaTicket) * 100) / 100;
       
       // === DEDUCCIONES ===
@@ -708,7 +710,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         quincena: 1,
         dias_trabajados: diasLaborados,
         lunes_periodo: lunes,
-        sueldo_base: Math.round(sueldoBaseVES * 100) / 100,
+        // GUARDAR SUELDO QUINCENAL (período) no mensual
+        // Esto muestra 65 Bs para una quincena de 15 días
+        sueldo_base: Math.round(sueldoPeriodo * 100) / 100,
         bono_vacacional: bonoVacacional,
         utilidades: utilidad,
         otras_asignaciones: bonoTransporte + cestaTicket,
@@ -722,7 +726,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         total_deducciones: totalDeducciones,
         neto_pagar: netoPagar,
         tipo_cambio_usd: tasaCambio,
-        monto_bs: Math.round(netoPagar * tasaCambio * 100) / 100,
+        // El monto_bs ahora es el neto en VES (ya no multiplicar por tasa)
+        monto_bs: Math.round(netoPagar * 100) / 100,
         fecha_liquidacion: new Date().toISOString(),
         conceptos_asignaciones: [],
         conceptos_deducciones: []

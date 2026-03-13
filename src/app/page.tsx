@@ -2302,13 +2302,13 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
               <p className="text-xs text-neutral-400">Total Asignaciones</p>
               <p className="text-lg font-bold text-green-400">
-                {mostrarEnBs ? `Bs. ${(totalLoteAsignaciones * tasaCambio).toFixed(2)}` : `${totalLoteAsignaciones.toFixed(2)}`}
+                {mostrarEnBs ? `Bs. ${totalLoteAsignaciones.toFixed(2)}` : `${totalLoteAsignaciones.toFixed(2)}`}
               </p>
             </div>
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
               <p className="text-xs text-neutral-400">Total Deducciones</p>
               <p className="text-lg font-bold text-red-400">
-                {mostrarEnBs ? `Bs. ${(totalLoteDeducciones * tasaCambio).toFixed(2)}` : `${totalLoteDeducciones.toFixed(2)}`}
+                {mostrarEnBs ? `Bs. ${totalLoteDeducciones.toFixed(2)}` : `${totalLoteDeducciones.toFixed(2)}`}
               </p>
             </div>
             <div className="bg-neutral-700 rounded-lg p-3 text-center">
@@ -2366,13 +2366,13 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
                     </td>
                     <td className="px-3 py-2 text-right text-green-400">
                       {mostrarEnBs 
-                        ? `Bs. ${(item.liquidacion.total_asignaciones * tasaCambio).toFixed(2)}`
+                        ? `Bs. ${item.liquidacion.total_asignaciones.toFixed(2)}`
                         : `${item.liquidacion.total_asignaciones.toFixed(2)}`
                       }
                     </td>
                     <td className="px-3 py-2 text-right text-red-400">
                       {mostrarEnBs 
-                        ? `Bs. ${(item.liquidacion.total_deducciones * tasaCambio).toFixed(2)}`
+                        ? `Bs. ${item.liquidacion.total_deducciones.toFixed(2)}`
                         : `${item.liquidacion.total_deducciones.toFixed(2)}`
                       }
                     </td>

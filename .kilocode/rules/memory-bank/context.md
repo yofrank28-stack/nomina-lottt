@@ -23,6 +23,10 @@ Sistema de nómina para Venezuela con soporte para:
   - Entrada Manual Individual: Campos de Asignaciones/Deducciones adicionales habilitados
   - Botones de Guardado Dual: Botón "Guardar Registro Individual" en cada tarjeta + "Guardar Todos"
   - Acciones por Lote: Checkboxes + botón "Aplicar a Selección" para asignaciones/deducciones
+- [x] Correcciones cálculo quincenal:
+  - Sueldo Base en recibo = mensual/2 (130 Bs → 65 Bs quincena)
+  - Eliminado multiplicación por tasa BCV en montos VES
+  - Total Asignaciones = Sueldo Quincenal + Asignaciones Manuales
 
 ## Current Focus
 
@@ -99,3 +103,4 @@ export async function GET() {
 | 2026-03-12 | Corrección lógica conversión BCV - Sueldo VES ahora es literal (no multiplica por tasa) |
 | 2026-03-12 | Ajuste fórmula nómina: (sueldo/30)*dias para que 130Bs*15días=65Bs |
 | 2026-03-13 | Reconfiguración módulo Nómina: Sincronización total, entrada manual, botones duales, acciones por lote |
+| 2026-03-13 | Corrección cálculo quincenal: Sueldo Base = monthly/2 (130→65 Bs), eliminada conversión automática |
