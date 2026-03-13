@@ -1819,25 +1819,33 @@ function NominaView({ empresaId }: { empresaId?: number | null }) {
       }
       
       const dias = diasLaborados;
-      const sueldoBaseUSD = emp.tipo_moneda_sueldo === "USD" ? emp.sueldo_base : emp.sueldo_base / tasaCambio;
       
-      const adicionalesAsignaciones = calcularTotalConceptosAsignaciones(sueldoBaseUSD);
-      const adicionalesDeducciones = calcularTotalConceptosDeducciones(sueldoBaseUSD);
+      // === CORRECCIÓN: Usar lógica correcta de cálculo ===
+      // Si es VES: Multiplicador = 1 (valor literal)
+      // Si es USD: Multiplicador = tasaCambio
+      const esVES = emp.tipo_moneda_sueldo === 'VES';
+      const MultiplicadorBCV = esVES ? 1 : tasaCambio;
+      const SueldoEnBs = emp.sueldo_base * MultiplicadorBCV;
+      
+      // === CALC: SueldoQuincena = SueldoMensual / 2 ===
+      const SueldoQuincena = SueldoEnBs / 2;
+      
+      // Usar SueldoQuincena para los cálculos
+      const adicionalesAsignaciones = calcularTotalConceptosAsignaciones(SueldoQuincena);
+      const adicionalesDeducciones = calcularTotalConceptosDeducciones(SueldoQuincena);
       
       const result = engineLOTTT.procesarLiquidacion(
         {
           diasLaborados: dias,
           lunesPeriodo: lunes,
-          sueldoBase: sueldoBaseUSD,
+          // Pasar el sueldo quincenal al engine
+          sueldoBase: SueldoQuincena,
           fechaIngreso: emp.fecha_ingreso,
           tieneHijos: emp.tiene_hijos,
           cantidadHijos: emp.cantidad_hijos,
-          // Datos para cálculos proporcionales
           fechaEgreso: emp.fecha_egreso,
-          // Beneficios individuales por trabajador
           pagarBonoVacacionalIndividual: emp.pagar_bono_vacacional,
           pagarUtilidadesIndividual: emp.pagar_utilidades,
-          // Fechas del período para cálculos proporcionales
           fechaInicioPeriodo: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
           fechaFinPeriodo: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-30`
         },

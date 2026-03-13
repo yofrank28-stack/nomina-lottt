@@ -26,6 +26,7 @@ Sistema de nómina para Venezuela con soporte para:
   - RPE (0.5%): ((Sueldo*12)/52)*0.005*5
   - FAOV (1%): SueldoQuincena*0.01
 - [x] Corrección UI: Debug log + re-render forzado tras guardar
+- [x] Corrección procesarNomina: Lógica dinámica desde Personal, no sobreescribe ediciones
 
 ## Current Focus
 
