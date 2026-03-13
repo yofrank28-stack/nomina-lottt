@@ -46,12 +46,12 @@ export default function ServiceSuspendedPage() {
   
   // Determinar si debe mostrar la página
   const debeMostrarPagina = !!(empresa && 
-    usuario?.rol !== 'ADMIN_MAESTRO' && 
+    usuario?.rol !== 'MASTER' && 
     (empresa.status === 'suspended' || empresa.status === 'terminated'));
 
   // Redireccionar si es admin master o empresa no está suspendida/terminada
   useEffect(() => {
-    if (usuario?.rol === 'ADMIN_MAESTRO') {
+    if (usuario?.rol === 'MASTER') {
       router.push('/');
       return;
     }

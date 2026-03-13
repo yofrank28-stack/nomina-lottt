@@ -390,4 +390,322 @@ export const engineLOTTT = {
   }
 };
 
+// ============================================================
+// CÁLCULO DE PRESTACIONES SOCIALES - DOBLE VÍA (LOTTT Art. 142)
+// ============================================================
+
+export interface PrestacionCalculada {
+  // Garantía (Art. 142.a) - 5 días por mes
+  garantia: number;
+  dias_garantia: number;
+  // Retroactividad (Leyes anteriores) - Diferencia entre旧 y nuevo cálculo
+  retroactividad: number;
+  dias_retroactividad: number;
+  // Intereses sobre Prestaciones (Art. 143)
+  intereses: number;
+  tasa_activa: number;
+  // Totales
+  total_antiguedad: number;
+  total_prestacion: number;
+  // Salary Integral
+  salary_integral: number;
+  // Detalle para comparativo legal
+  detalle: {
+    salario_base: number;
+    bono_vacacional_mensual: number;
+    utilidades_mensuales: number;
+    total_dias_laborados: number;
+    factor_actualizacion: number;
+  };
+}
+
+// Función para calcular Prestaciones Sociales con Doble Vía
+export function calcularPrestaciones(
+  fechaIngreso: string,
+  fechaEgreso: string,
+  ultimoSueldo: number,
+  diasAcumuladosGarantia: number,
+  tasaActivaAnual: number,
+  riesgoIvss: number = 9 // Por defecto 9%
+): PrestacionCalculada {
+  const ingreso = new Date(fechaIngreso);
+  const egreso = new Date(fechaEgreso);
+  
+  // Calcular antigüedad en días
+  const diffTime = egreso.getTime() - ingreso.getTime();
+  const diasTotales = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  // Días de garantía: 5 días por mes (máximo según antigüedad)
+  const diasGarantia = Math.min(diasAcumuladosGarantia, Math.floor(diasTotales / 30) * 5);
+  
+  // Cálculo Salary Integral (Art. 104 LOTTT)
+  // = Salario base + Bono Vacacional (15 días) + Utilidades (30 días)
+  const bonoVacacionalDiario = (ultimoSueldo * 12) / 360;
+  const utilidadesDiario = (ultimoSueldo * 12) / 360;
+  const salaryIntegral = ultimoSueldo + (bonoVacacionalDiario * 15 / 12) + (utilidadesDiario * 30 / 12);
+  
+  // GARANTÍA (Art. 142.a - 5 días por mes)
+  const garantia = (salaryIntegral / 30) * diasGarantia;
+  
+  // RETROACTIVIDAD (Cálculo diferenciado por antigüedad)
+  // Para trabajadores con más de 5 años: aplica retroactividad
+  const anosAntiguedad = diasTotales / 365;
+  let retroactividad = 0;
+  let diasRetro = 0;
+  
+  if (anosAntiguedad >= 5) {
+    // Cálculo retroactivo: Diferencia entre旧 sistema (90 días) y nuevo (15 días)
+    diasRetro = Math.max(0, 90 - Math.floor(diasTotales / 30));
+    retroactividad = (salaryIntegral / 30) * diasRetro * 0.5; // 50% adicional
+  }
+  
+  // INTERESES sobre Prestaciones (Art. 143)
+  // Tasa activa mensual = tasa anual / 12 / 100
+  const tasaActivaMensual = tasaActivaAnual / 12 / 100;
+  const intereses = (garantia + retroactividad) * tasaActivaMensual * (diasTotales / 30);
+  
+  return {
+    garantia: Math.round(garantia * 100) / 100,
+    dias_garantia: diasGarantia,
+    retroactividad: Math.round(retroactividad * 100) / 100,
+    dias_retroactividad: diasRetro,
+    intereses: Math.round(intereses * 100) / 100,
+    tasa_activa: tasaActivaAnual,
+    total_antiguedad: Math.round((garantia + retroactividad + intereses) * 100) / 100,
+    total_prestacion: Math.round((garantia + retroactividad + intereses) * 100) / 100,
+    salary_integral: Math.round(salaryIntegral * 100) / 100,
+    detalle: {
+      salario_base: ultimoSueldo,
+      bono_vacacional_mensual: Math.round(bonoVacacionalDiario * 15 / 12 * 100) / 100,
+      utilidades_mensuales: Math.round(utilidadesDiario * 30 / 12 * 100) / 100,
+      total_dias_laborados: diasTotales,
+      factor_actualizacion: Math.round((salaryIntegral / ultimoSueldo) * 100) / 100
+    }
+  };
+}
+
+// ============================================================
+// BONO VACACIONAL - Escala LOTTT (Art. 127)
+// 15 días + 1 día por cada año adicional (máximo 30 días)
+// ============================================================
+
+export function calcularBonoVacacionalEscala(
+  fechaIngreso: string,
+  salaryIntegral: number
+): { dias: number; monto: number } {
+  const ingreso = new Date(fechaIngreso);
+  const hoy = new Date();
+  
+  const diffTime = hoy.getTime() - ingreso.getTime();
+  const anosAntiguedad = Math.floor(diffTime / (365.25 * 24 * 60 * 60 * 1000));
+  
+  // Días de bono según antigüedad
+  let dias = 15;
+  if (anosAntiguedad >= 1) dias += 1; // 1 día adicional por año
+  if (anosAntiguedad >= 2) dias += 1;
+  if (anosAntiguedad >= 3) dias += 1;
+  if (anosAntiguedad >= 4) dias += 1;
+  if (anosAntiguedad >= 5) dias += 2; // A partir del 5to año, +2 días
+  // Máximo 30 días
+  dias = Math.min(dias, 30);
+  
+  // Cálculo del monto
+  const diario = (salaryIntegral * 12) / 360;
+  const monto = diario * dias;
+  
+  return { dias, monto: Math.round(monto * 100) / 100 };
+}
+
+// ============================================================
+// UTILIDADES PERSONALIZABLES (Art. 131-132 LOTTT)
+// 15 a 30 días de salario según utilidades de la empresa
+// ============================================================
+
+export function calcularUtilidadesPersonalizables(
+  fechaIngreso: string,
+  salaryIntegral: number,
+  diasConfigurados: number = 15 // Por defecto 15 días, configurable
+): { dias: number; monto: number } {
+  const ingreso = new Date(fechaIngreso);
+  const hoy = new Date();
+  
+  const diffTime = hoy.getTime() - ingreso.getTime();
+  const mesesAntiguedad = Math.floor(diffTime / (30.44 * 24 * 60 * 60 * 1000));
+  
+  // Proporcional según meses trabajados en el año
+  const proporcion = Math.min(mesesAntiguedad / 12, 1);
+  const dias = Math.floor(diasConfigurados * proporcion);
+  
+  // Cálculo del monto
+  const diario = (salaryIntegral * 12) / 360;
+  const monto = diario * Math.max(dias, 1); // Mínimo 1 día
+  
+  return { dias, monto: Math.round(monto * 100) / 100 };
+}
+
+// ============================================================
+// CONTRIBUCIÓN ESPECIAL 9% (Ley de Protección a Pensiones)
+// Base indexada = Salario Mínimo × Factor de Indexación
+// ============================================================
+
+export function calcularContribucionEspecial(
+  salaryIntegral: number,
+  salarioMinimo: number,
+  tasaCambio: number
+): { base: number; contribucion: number; exonerada: boolean } {
+  // Factor de indexación (ejemplo: 5 veces el salario mínimo)
+  const factorIndexacion = 5;
+  const baseIndexada = salarioMinimo * factorIndexacion;
+  
+  // La contribución solo aplica si el salary integral excede la base indexada
+  if (salaryIntegral <= baseIndexada) {
+    return { base: baseIndexada, contribucion: 0, exonerada: true };
+  }
+  
+  const base = salaryIntegral - baseIndexada;
+  const contribucion = base * 0.09; // 9%
+  
+  return {
+    base: Math.round(base * 100) / 100,
+    contribucion: Math.round(contribucion * 100) / 100,
+    exonerada: false
+  };
+}
+
+// ============================================================
+// GENERADOR DE ARCHIVOS TXT PARA BANCOS
+// ============================================================
+
+export interface RegistroBanco {
+  cedula: string;
+  nombre: string;
+  banco: string;
+  numero_cuenta: string;
+  tipo_cuenta: 'C' | 'A'; // Corriente / Ahorro
+  monto: number;
+  concepto?: string;
+}
+
+export function generarTxtBancos(
+  registros: RegistroBanco[],
+  formato: 'BANESCO' | 'MERCANTIL' | 'VENEZUELA' | 'PROVINCIAL' | 'OTRO'
+): string {
+  const lineas: string[] = [];
+  
+  // Header según formato
+  const fecha = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  lineas.push(`H|${formato}|${fecha}|${registros.length}`);
+  
+  // Detalle de cada registro
+  registros.forEach((r, idx) => {
+    const montoStr = r.monto.toFixed(2).replace('.', '');
+    const linea = [
+      'D',
+      (idx + 1).toString().padStart(6, '0'),
+      r.cedula.replace(/[VEv]-/g, ''),
+      r.nombre.substring(0, 40).padEnd(40, ' '),
+      r.banco.substring(0, 4).padEnd(4, ' '),
+      r.numero_cuenta.padEnd(20, ' '),
+      r.tipo_cuenta,
+      montoStr.padStart(15, '0'),
+      r.concepto?.substring(0, 30).padEnd(30, ' ') || ''.padEnd(30, ' ')
+    ].join('|');
+    lineas.push(linea);
+  });
+  
+  // Footer
+  const total = registros.reduce((sum, r) => sum + r.monto, 0);
+  lineas.push(`T|${registros.length}|${total.toFixed(2).replace('.', '').padStart(18, '0')}`);
+  
+  return lineas.join('\n');
+}
+
+// ============================================================
+// GENERADOR DE REPORTES PARA ENTES
+// ============================================================
+
+export function generarReporteTIUNA(
+  empleados: any[],
+  empresa: any,
+  periodo: string
+): string {
+  const lineas: string[] = [];
+  
+  // Header
+  lineas.push(`EMPRESA|${empresa.rif}|${empresa.nombre}`);
+  lineas.push(`PERIODO|${periodo}`);
+  lineas.push(`CANTIDAD_TRABAJADORES|${empleados.length}`);
+  lineas.push('---DETALLE---');
+  
+  // Empleados
+  empleados.forEach(emp => {
+    lineas.push([
+      emp.cedula,
+      emp.nombre,
+      emp.apellido,
+      emp.cargo || '',
+      emp.sueldo_base.toFixed(2),
+      emp.tipo_contrato
+    ].join('|'));
+  });
+  
+  return lineas.join('\n');
+}
+
+export function generarReporteBANAVIH(
+  empleados: any[],
+  empresa: any,
+  periodo: string
+): string {
+  const lineas: string[] = [];
+  
+  lineas.push(`RIF|${empresa.rif}`);
+  lineas.push(`RAZON_SOCIAL|${empresa.nombre}`);
+  lineas.push(`PERIODO|${periodo}`);
+  lineas.push(`---NÓMINA---`);
+  
+  empleados.forEach(emp => {
+    const aportaciones = (emp.sueldo_base * 0.02).toFixed(2); // 2% BANAVIH
+    lineas.push(`${emp.cedula}|${emp.nombre}|${emp.sueldo_base.toFixed(2)}|${aportaciones}`);
+  });
+  
+  return lineas.join('\n');
+}
+
+export function generarReporteSENIAT(
+  empleados: any[],
+  empresa: any,
+  periodo: string
+): string {
+  const lineas: string[] = [];
+  
+  // Formato ASXML para SENIAT
+  lineas.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lineas.push('<DeclaracionISLR>');
+  lineas.push(`  <RifContribuyente>${empresa.rif}</RifContribuyente>`);
+  lineas.push(`  <Periodo>${periodo}</Periodo>`);
+  lineas.push('  <Detalle>');
+  
+  empleados.forEach(emp => {
+    // Calcular retención 2.5% - 10% según tabla
+    const ingresoAnual = emp.sueldo_base * 12;
+    let retencion = 0;
+    if (ingresoAnual > 15000) retencion = ingresoAnual * 0.025;
+    if (ingresoAnual > 25000) retencion = ingresoAnual * 0.05;
+    if (ingresoAnual > 50000) retencion = ingresoAnual * 0.10;
+    
+    lineas.push(`    <Trabajador>`);
+    lineas.push(`      <Cedula>${emp.cedula}</Cedula>`);
+    lineas.push(`      <Nombre>${emp.nombre} ${emp.apellido || ''}</Nombre>`);
+    lineas.push(`      <IngresoGravado>${ingresoAnual.toFixed(2)}</IngresoGravado>`);
+    lineas.push(`      <Retencion>${retencion.toFixed(2)}</Retencion>`);
+    lineas.push(`    </Trabajador>`);
+  });
+  
+  lineas.push('  </Detalle>');
+  lineas.push('</DeclaracionISLR>');
+  
+  return lineas.join('\n');
+}
+
 export default engineLOTTT;

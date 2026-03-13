@@ -47,10 +47,12 @@ export interface Usuario {
   id: number;
   username: string;
   nombre_completo: string;
-  rol: 'ADMIN_MAESTRO' | 'ADMIN_EMPRESA' | 'OPERADOR';
+  rol: 'MASTER' | 'ADMIN_EMPRESA' | 'ANALISTA' | 'TRABAJADOR';
   empresa_id?: number;
-  empresas_permitidas?: number[]; // IDs de empresas que puede ver/gestionar
-  es_super_admin?: boolean; //true solo para ADMIN_MAESTRO
+  empresas_permitidas?: number[];
+  es_super_admin?: boolean;
+  sesiones_activas?: number;
+  ultimo_acceso?: string;
 }
 
 export interface Empleado {
@@ -64,16 +66,64 @@ export interface Empleado {
   fecha_egreso?: string;
   cargo?: string;
   departamento?: string;
-  sueldo_base: number;  // Monto del sueldo base
-  tipo_moneda_sueldo: 'USD' | 'VES';  // Tipo de moneda del sueldo base
+  sueldo_base: number;
+  tipo_moneda_sueldo: 'USD' | 'VES';
   estatus: 'ACTIVO' | 'VACACIONES' | 'EGRESADO' | 'SUSPENDIDO';
   tipo_contrato: 'FIJO' | 'INDEFINIDO' | 'TEMPORAL';
   tiene_hijos: boolean;
   cantidad_hijos: number;
-  empresa_nombre?: string; // Nombre de la empresa para mostrar
-  // Beneficios individuales (por trabajador)
-  pagar_bono_vacacional?: boolean;  // Bono vacacional individual
-  pagar_utilidades?: boolean;        // Utilidades individual
+  empresa_nombre?: string;
+  pagar_bono_vacacional?: boolean;
+  pagar_utilidades?: boolean;
+  // Datos bancarios
+  banco?: string;
+  numero_cuenta?: string;
+  tipo_cuenta?: 'CORRIENTE' | 'AHORRO';
+  // RIESGO IVSS
+  riesgo_ivss?: number; // Porcentaje 9-11%
+}
+
+export interface ValidacionPago {
+  id: number;
+  empresa_id: number;
+  empleado_id: number;
+  monto: number;
+  metodo_pago: 'ZINLI' | 'BINANCE' | 'PAGO_MOVIL' | 'TRANSFERENCIA' | 'EFECTIVO';
+  referencia: string;
+  capture_url?: string;
+  fecha_pago: string;
+  status: 'PENDIENTE' | 'VALIDADO' | 'RECHAZADO';
+  validado_por?: number;
+  fecha_validacion?: string;
+  observaciones?: string;
+}
+
+export interface Prestacion {
+  id: number;
+  empleado_id: number;
+  empresa_id: number;
+  fecha_calculada: string;
+  // Doble Vía
+  garantia: number;
+  retroactividad: number;
+  intereses: number;
+  total: number;
+  // Detalle
+  salary: number;
+  dias_garantia: number;
+  dias_retroactividad: number;
+  tasa_activa: number;
+  tipo_calculo: 'GARANTIA' | 'RETROACTIVO' | 'AMBOS';
+  status: 'CALCULADA' | 'APROBADA' | 'PAGADA';
+  fecha_pago?: string;
+}
+
+// Tipos para reportes TXT
+export interface ConfiguracionBanco {
+  banco: string;
+  formato: 'BANESCO' | 'MERCANTIL' | 'VENEZUELA' | 'PROVINCIAL' | 'OTRO';
+  cuenta_empresa: string;
+  email_reporte?: string;
 }
 
 export interface Parametros {
@@ -362,8 +412,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   getEmpresasfiltradas: () => {
     const { empresas, empresasPermitidas, usuario } = get();
     if (!usuario) return [];
-    // ADMIN_MAESTRO puede ver todas
-    if (usuario.rol === 'ADMIN_MAESTRO') return empresas;
+    // MASTER puede ver todas
+    if (usuario.rol === 'MASTER') return empresas;
     // Otros roles ven solo empresas permitidas
     return empresas.filter(e => empresasPermitidas.includes(e.id));
   },
@@ -372,8 +422,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   getEmpleadosFiltrados: () => {
     const { empleados, empresaSeleccionadaId, usuario } = get();
     if (!usuario) return [];
-    // ADMIN_MAESTRO con empresa null puede ver todos
-    if (usuario.rol === 'ADMIN_MAESTRO' && !empresaSeleccionadaId) return empleados;
+    // MASTER con empresa null puede ver todos
+    if (usuario.rol === 'MASTER' && !empresaSeleccionadaId) return empleados;
     // Filtrar por empresa seleccionada
     if (empresaSeleccionadaId) {
       return empleados.filter(e => e.empresa_id === empresaSeleccionadaId);
@@ -385,8 +435,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   puedeGestionarEmpresa: (empresaId: number) => {
     const { usuario, empresasPermitidas } = get();
     if (!usuario) return false;
-    // ADMIN_MAESTRO puede gestionar todo
-    if (usuario.rol === 'ADMIN_MAESTRO') return true;
+    // MASTER puede gestionar todo
+    if (usuario.rol === 'MASTER') return true;
     // Otros solo pueden gestionar empresas permitidas
     return empresasPermitidas.includes(empresaId);
   },
@@ -394,7 +444,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Verificar si puede ver todas las empresas
   puedeVerTodasEmpresas: () => {
     const { usuario } = get();
-    return usuario?.rol === 'ADMIN_MAESTRO';
+    return usuario?.rol === 'MASTER';
   },
   
   setEmpleados: (empleados) => set({ empleados }),
@@ -463,7 +513,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           id: 1,
           username: 'admin',
           nombre_completo: 'Administrador Maestro',
-          rol: 'ADMIN_MAESTRO',
+          rol: 'MASTER',
           empresa_id: 1,
           es_super_admin: true
         };
@@ -479,7 +529,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             fecha_terminacion: '2024-12-31', expediente_descargado: false }
         ];
         
-        // ADMIN_MAESTRO tiene acceso a todas las empresas
+        // MASTER tiene acceso a todas las empresas
         const empresasPermitidas = empresas.map(e => e.id);
         
         const empleados: Empleado[] = [
@@ -493,7 +543,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           usuario,
           empresas,
           empresasPermitidas,
-          empresaSeleccionadaId: null, // ADMIN_MAESTRO puede ver todas
+          empresaSeleccionadaId: null, // MASTER puede ver todas
           empleados,
           isAuthenticated: true,
           loading: false
@@ -1002,9 +1052,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   puedeAccederANomina: (empresaId: number): boolean => {
     const status = get().getEmpresaStatus(empresaId);
-    // Solo puede acceder si está active o si es ADMIN_MAESTRO
+    // Solo puede acceder si está active o si es MASTER
     const { usuario } = get();
-    if (usuario?.rol === 'ADMIN_MAESTRO') return true;
+    if (usuario?.rol === 'MASTER') return true;
     return status === 'active';
   },
   

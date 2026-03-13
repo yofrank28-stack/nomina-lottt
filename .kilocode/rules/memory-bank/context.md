@@ -1,15 +1,37 @@
-# Active Context: Sistema de Nómina Venezuela
+# Active Context: Nómina Venezuela SaaS Enterprise
 
 ## Current State
 
-**Project Status**: ✅ Sistema de nómina en funcionamiento
+**Project Status**: ✅ Plataforma SaaS Multiempresa - Enterprise Edition
 
-Sistema de nómina para Venezuela con soporte para:
-- Gestión de empresas y empleados
+Sistema de nómina empresarial con soporte para:
+- Gestión multiempresa con aislamiento total
 - Cálculo de nómina quincenal (15 días)
 - Deducciones legales (IVSS, RPE, FAOV, INCES)
 - Beneficios (bono vacacional, utilidades)
 - Conversión USD/VES con tasa BCV
+- Prestaciones Sociales (Doble Vía)
+- Reportes TXT para bancos yentes
+
+## Recently Completed
+
+- [x] REDISEÑO SAAS ENTERPRISE:
+  - Dashboard Master con métricas de licencias
+  - Widget Tasas BCV + Tasa Activa
+  - Sistema de validación de pagos
+  - Diseño Dark Mode profesional
+- [x] MOTOR DE CÁLCULOS LEGALES:
+  - Doble Vía (Garantía vs Retroactividad)
+  - Salary Integral (Art. 104 LOTTT)
+  - Bono Vacacional escala (15+1 días)
+  - Utilidades personalizables
+  - Contribución Especial 9%
+- [x] REPORTES TXT:
+  - Formatos para Banesco, Mercantil, Venezuela, Provincial
+  - Reportes para TIUNA, BANAVIH, SENIAT
+- [x] SISTEMA DE ROLES:
+  - MASTER, ADMIN_EMPRESA, ANALISTA, TRABAJADOR
+  - Aislamiento por sesión y empresa
 
 ## Recently Completed
 
@@ -115,3 +137,7 @@ export async function GET() {
 | 2026-03-13 | Guardado Individual mejorado, formato numérico regional (punto miles, coma decimales) |
 | 2026-03-13 | REWRITE completo nómina: SueldoQuincena=SueldoMensual/2, BLOQUEO BCV=1 para VES, Intl.NumberFormat('es-VE'), saveIndividualRecord() |
 | 2026-03-13 | Actualización tasa BCV=443,26, deducciones Ley Marzo 2026 (5 Lunes), debug+re-render tras guardar |
+| 2026-03-13 | SaaS Enterprise: Dashboard Master, métricas licencias, widget tasas, semáforo licencias, Dark Mode |
+| 2026-03-13 | Motor Cálculos Legales: Doble Vía (Garantía/Retroactividad), Salary Integral, Bono Vacacional escala |
+| 2026-03-13 | Reportes TXT: Bancos (Banesco/Mercantil/etc), Entes (TIUNA/BANAVIH/SENIAT), Recibos legales |
+| 2026-03-13 | Sistema Roles: MASTER/ADMIN_EMPRESA/ANALISTA/TRABAJADOR con aislamiento multiempresa |

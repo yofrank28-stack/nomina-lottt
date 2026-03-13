@@ -160,7 +160,7 @@ function Dashboard() {
 
   // Verificar status de empresa al cambiar selección
   useEffect(() => {
-    if (empresaSeleccionadaId && usuario?.rol !== 'ADMIN_MAESTRO') {
+    if (empresaSeleccionadaId && usuario?.rol !== 'MASTER') {
       const status = getEmpresaStatus(empresaSeleccionadaId);
       if (status === 'suspended' || status === 'terminated') {
         router.push(`/service-suspended?empresa=${empresaSeleccionadaId}`);
@@ -170,7 +170,7 @@ function Dashboard() {
 
   // Verificar acceso al cambiar de vista
   const handleViewChange = (view: string) => {
-    if (empresaSeleccionadaId && usuario?.rol !== 'ADMIN_MAESTRO') {
+    if (empresaSeleccionadaId && usuario?.rol !== 'MASTER') {
       const status = getEmpresaStatus(empresaSeleccionadaId);
       if (status === 'suspended' || status === 'terminated') {
         // Solo permitir vistas limitadas
@@ -1018,8 +1018,8 @@ function EmpresasView() {
               </div>
             </div>
             
-            {/* Botones de Estado para ADMIN_MAESTRO */}
-            {usuario?.rol === 'ADMIN_MAESTRO' && empresa.id !== 1 && (
+            {/* Botones de Estado para MASTER */}
+            {usuario?.rol === 'MASTER' && empresa.id !== 1 && (
               <div className="mt-4 pt-4 border-t border-neutral-700">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-neutral-400">
