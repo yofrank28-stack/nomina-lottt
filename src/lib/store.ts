@@ -446,6 +446,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { usuario } = get();
     return usuario?.rol === 'MASTER';
   },
+
+  // ============================================================
+  // SEGREGACIÓN POR EMPRESA - AISLAMIENTO TOTAL
+  // Todas las consultas deben pasar por estas funciones
+  // ============================================================
+  
+  // Filtrar empleados por empresa (aislamiento)
+  getEmpleadosPorEmpresa: (empresaId: number | null) => {
+    const { empleados } = get();
+    if (!empresaId) return [];
+    return empleados.filter(e => e.empresa_id === empresaId);
+  },
+  
+  // Filtrar liquidaciones por empresa
+  getLiquidacionesPorEmpresa: (empresaId: number | null) => {
+    const { liquidaciones } = get();
+    if (!empresaId) return [];
+    return liquidaciones.filter(l => l.empresa_id === empresaId);
+  },
+  
+  // Verificar acceso a datos de empresa específica
+  puedeAccederAEmpresa: (empresaId: number) => {
+    const { usuario, empresasPermitidas } = get();
+    if (!usuario) return false;
+    if (usuario.rol === 'MASTER') return true;
+    return empresasPermitidas.includes(empresaId);
+  },
   
   setEmpleados: (empleados) => set({ empleados }),
   setLiquidaciones: (liquidaciones) => set({ liquidaciones }),
